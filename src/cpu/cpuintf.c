@@ -77,7 +77,7 @@ neogeo_configure_game (char *gamename)
 
   while( strlen(gameconfig[i].gamename) )
     {
-      if (stricmp (gamename, gameconfig[i].gamename) == 0)
+      if (strcasecmp (gamename, gameconfig[i].gamename) == 0)
 	{
 	  nowait_irqack = gameconfig[i].nowait_irqack;
 	  raster_interrupt_enabled = gameconfig[i].raster_interrupt_enabled;

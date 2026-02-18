@@ -80,35 +80,35 @@ static int getfilelen(GENFILE fp)
 int recon_filetype(char *ext)
 {
   /*** Art of Fighting fixes ***/
-  if (stricmp(ext, "OBJ") == 0)
+  if (strcasecmp(ext, "OBJ") == 0)
     strcpy(ext, "SPR");
 
-  if (stricmp(ext, "AAT") == 0)
+  if (strcasecmp(ext, "AAT") == 0)
     strcpy(ext, "PAT");
 
-  if (stricmp(ext, "ACM") == 0)
+  if (strcasecmp(ext, "ACM") == 0)
     strcpy(ext, "PCM");
 
   /*** Neo Turf Master ***/
-  if (stricmp(ext, "A80") == 0)
+  if (strcasecmp(ext, "A80") == 0)
     return PRG_TYPE;
 
-  if (stricmp(ext, PRG) == 0)
+  if (strcasecmp(ext, PRG) == 0)
     return PRG_TYPE;
 
-  if (stricmp(ext, FIX) == 0)
+  if (strcasecmp(ext, FIX) == 0)
     return FIX_TYPE;
 
-  if (stricmp(ext, SPR) == 0)
+  if (strcasecmp(ext, SPR) == 0)
     return SPR_TYPE;
 
-  if (stricmp(ext, Z80) == 0)
+  if (strcasecmp(ext, Z80) == 0)
     return Z80_TYPE;
 
-  if (stricmp(ext, PAT) == 0)
+  if (strcasecmp(ext, PAT) == 0)
     return PAT_TYPE;
 
-  if (stricmp(ext, PCM) == 0)
+  if (strcasecmp(ext, PCM) == 0)
     return PCM_TYPE;
 
   return -1;
@@ -741,7 +741,7 @@ void neogeo_upload(void)
       memcpy(Dest, Source, Taille);
       neogeo_decode_spr(neogeo_spr_memory, Offset, Taille);
 
-      // Mise à jour des valeurs
+      // Mise \E0 jour des valeurs
       Offset = m68k_read_memory_32(0x10FEF4);
       Banque = m68k_read_memory_8(0x10FEDB);
       Taille = m68k_read_memory_8(0x10FEFC);
@@ -804,7 +804,7 @@ void neogeo_upload(void)
 
       memcpy(Dest, Source, Taille);
 
-      // Mise à jour des valeurs
+      // Mise \E0 jour des valeurs
       Offset = m68k_read_memory_32(0x10FEF4);
       Banque = m68k_read_memory_8(0x10FEDB);
       Taille = m68k_read_memory_8(0x10FEFC);

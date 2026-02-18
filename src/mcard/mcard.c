@@ -18,7 +18,7 @@
 #define MC_COMMENT1 "NeoCD RX 1.5"
 #define MC_COMMENT2 "CD Memory Card Save"
 
-static u8 SysArea[CARD_WORKAREA] ATTRIBUTE_ALIGN (32);
+static u8 SysArea[CARD_WORKAREA_SIZE] ATTRIBUTE_ALIGN (32);
 static u8 mcardbuffer[MC_SIZE] ATTRIBUTE_ALIGN (32);
 static card_dir CardDir;
 static card_file CardFile;
@@ -36,7 +36,7 @@ MountMemCard (void)
   int CardError;
   int retries = 0;
 
-  memset (SysArea, 0, CARD_WORKAREA);
+  memset (SysArea, 0, CARD_WORKAREA_SIZE);
 
   while (retries < 10)
     {

@@ -74,9 +74,9 @@ extern const Sint32 ym_deltat_decode_tableB2[];
 inline void YM_DELTAT_ADPCM_CALC (YM_DELTAT * DELTAT);
 
 /* INLINE void YM_DELTAT_ADPCM_CALC(YM_DELTAT *DELTAT); */
-//#define YM_INLINE_BLOCK
-//#include "ymdeltat.c" /* include inline function section */
-//#undef  YM_INLINE_BLOCK
+#define YM_INLINE_BLOCK
+#include "ymdeltat.c" /* include inline function section */
+#undef  YM_INLINE_BLOCK
 
 void YM_DELTAT_postload (YM_DELTAT * DELTAT, Uint8 * regs);
 void YM_DELTAT_savestate (YM_DELTAT * DELTAT);

@@ -192,7 +192,7 @@ void SortListing( int max )
     {
       for( seek = top + 1; seek < max; seek++ )
         {
-          if ( stricmp(direntries[top], direntries[seek]) > 0 )
+          if ( strcasecmp(direntries[top], direntries[seek]) > 0 )
             {
               t = direntries[top];
               direntries[top] = direntries[seek];

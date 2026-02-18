@@ -15,7 +15,7 @@
 #include <ogc/exi.h>
 #include "ata.h"
 
-extern int usleep ();
+#include <unistd.h>
 
 
 u16 buffer[256] ATTRIBUTE_ALIGN (32);

@@ -68,6 +68,7 @@ void neogeo_decode_fix(unsigned char *mem, unsigned int offset,
 void neogeo_cdda_control(void);
 void neogeo_prio_switch(void);
 void neogeo_exit(void);
+void neogeocd_exit(void);
 void neogeo_exit_cdplayer(void);
 void neogeo_new_game(void);
 void neogeo_trace(void);

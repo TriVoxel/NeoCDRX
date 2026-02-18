@@ -57,7 +57,8 @@ static DVDDriveInfo dinfo ATTRIBUTE_ALIGN(32);
 #endif
 
 static long long int DVDMaxCapacity = 0;
-extern int usleep();
+#include <unistd.h>
+#include <strings.h>
 
 
 /****************************************************************************
@@ -486,7 +487,7 @@ FindDirectory (char *dir)
         {
           if (pdec[i].parent == parent)
             {
-              if (stricmp (p, pdec[i].path) == 0)
+              if (strcasecmp (p, pdec[i].path) == 0)
                 {
                   parent = i + 1;
                   found = 1;
@@ -520,7 +521,7 @@ GetSubDirectories (char *dir, char *buf, int len)
 
   memset (buf, 0, len);
 
-  if (stricmp (dir, "/") == 0)
+  if (strcasecmp (dir, "/") == 0)
     parent = 1;
   else
     parent = FindDirectory (dir);
@@ -559,7 +560,7 @@ SearchCache (char *filename)
 
   for (i = 0; i < MAXCACHED; i++)
     {
-      if (stricmp (cachedfiles[i].fname, filename) == 0)
+      if (strcasecmp (cachedfiles[i].fname, filename) == 0)
         return i;
     }
 
@@ -651,7 +652,7 @@ FindFile (char *filename)
 
               cfile[i] = 0;
 
-              if (stricmp (cfile, file) == 0)
+              if (strcasecmp (cfile, file) == 0)
                 {
                   strcpy (cachedfiles[cached].fname, filename);
                   memcpy (&cachedfiles[cached].fdir, fdir, sizeof (DIRENTRY));

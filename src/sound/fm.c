@@ -848,7 +848,7 @@ inline void set_sl_rr(FM_SLOT * SLOT, int v, Sint32 * dr_table)
 #endif
 
 /* ---------- calcrate one of channel ---------- */
-inline void FM_CALC_CH(FM_CH * CH)
+static inline void FM_CALC_CH(FM_CH * CH)
 {
     Uint32 eg_out1, eg_out2, eg_out3, eg_out4;	/*envelope output */
 

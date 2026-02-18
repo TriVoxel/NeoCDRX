@@ -31,7 +31,6 @@ static int wkfInitialized = 0;
 static volatile unsigned int* const wkf = (unsigned int*)0xCC006000;
 static volatile unsigned int* const pireg = (unsigned int*)0xCC003000;
 
-extern u8 udelay();
 
 
 void __wkfReset() {
@@ -154,7 +153,7 @@ void wkfInit() {
 	else {
 		// If there's an SD, reset DVD (why?)
 		__wkfReset();
-		udelay(300000);
+		usleep(300000);
 					
 		// one chunk at 0, offset 0
 		wkfWriteRam(0, 0x0000);
@@ -179,7 +178,7 @@ void wkfInit() {
 
 void wkfReinit() {
 	__wkfReset();
-	udelay(300000);
+	usleep(300000);
 
 	// one chunk at 0, offset 0
 	wkfWriteRam(0, 0x0000);
