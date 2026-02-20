@@ -15,6 +15,17 @@
 #include <string.h>
 #include <ctype.h>
 #include "neocdrx.h"
+#include <dirent.h>
+#include <fat.h>
+bool ISO9660_Mount(const char *name, DISC_INTERFACE *iface);
+bool ISO9660_Unmount(const char *name);
+
+/* ISO file backing the current game — kept open so fatfs can read it */
+static FILE *iso_fp = NULL;
+bool iso_mounted = false;
+
+/* Directory containing the .iso + .mp3 files */
+char iso_dir[1024];
 
 #define PSEP '\\'
 
@@ -134,26 +145,116 @@ void cdrom_inc_progress(int done)
 *
 * Use this function to point all subsequent reads to a directory
 ****************************************************************************/
+/* Custom DISC_INTERFACE backed by a FILE* so ISO9660_Mount can read an
+ * .iso file stored on FAT without needing a real block device. */
+static FILE *_iso_file = NULL;
+
+static bool _iso_startup(DISC_INTERFACE *disc) { (void)disc; return _iso_file != NULL; }
+static bool _iso_isInserted(DISC_INTERFACE *disc) { (void)disc; return _iso_file != NULL; }
+static bool _iso_clearStatus(DISC_INTERFACE *disc) { (void)disc; return true; }
+static bool _iso_readSectors(DISC_INTERFACE *disc, sec_t sector, sec_t numSectors, void *buf)
+{
+    (void)disc;
+    if (!_iso_file) return false;
+    if (fseek(_iso_file, (long)sector * 2048, SEEK_SET) != 0) return false;
+    size_t n = fread(buf, 2048, numSectors, _iso_file);
+    return n == numSectors;
+}
+static bool _iso_writeSectors(DISC_INTERFACE *disc, sec_t sector, sec_t numSectors, const void *buf)
+{
+    (void)disc; (void)sector; (void)numSectors; (void)buf; return false;
+}
+static bool _iso_shutdown(DISC_INTERFACE *disc) { (void)disc; return true; }
+
+static const DISC_INTERFACE _iso_disc = {
+    0, 0,
+    _iso_startup, _iso_isInserted,
+    _iso_readSectors, _iso_writeSectors,
+    _iso_clearStatus, _iso_shutdown
+};
+
 int cdrom_mount(char *mount)
 {
-  char Path[256];
+  char Path[1024];
   char tmp[1024];
   GENFILE fp;
 
   strcpy(tmp, mount);
-
   if (tmp[strlen(tmp) - 1] != '/')
     strcat(tmp, "/");
 
+  /* --- First try: loose files (extracted NeoGeo CD format) --- */
   strcpy(cdpath, tmp);
   strcpy(Path, tmp);
   strcat(Path, IPL_TXT);
-
   fp = GEN_fopen(Path, "rb");
-  if (!fp)
-    return 0;
+  if (fp)
+  {
+    GEN_fclose(fp);
+    /* Clear any previous ISO mount */
+    if (iso_mounted) { ISO9660_Unmount("ncd:"); iso_mounted = false; }
+    if (iso_fp) { fclose(iso_fp); iso_fp = NULL; }
+    strncpy(iso_dir, tmp, sizeof(iso_dir) - 1);
+    return 1;
+  }
 
+  /* --- Second try: directory contains a .iso + .mp3 files --- */
+  /* Scan directory for a .iso file */
+  DIR *d = opendir(tmp);
+  if (!d) return 0;
+
+  char iso_name[256] = "";
+  char game_base[256] = ""; /* filename without extension, for MP3 matching */
+  struct dirent *ent;
+
+  while ((ent = readdir(d)) != NULL)
+  {
+    size_t nl = strlen(ent->d_name);
+    if (nl > 4 && strcasecmp(ent->d_name + nl - 4, ".iso") == 0)
+    {
+      strncpy(iso_name, ent->d_name, sizeof(iso_name) - 1);
+      /* Strip .iso to get base name */
+      strncpy(game_base, ent->d_name, sizeof(game_base) - 1);
+      game_base[nl - 4] = '\0';
+      break;
+    }
+  }
+  closedir(d);
+
+  if (iso_name[0] == '\0') return 0; /* no .iso found */
+
+  /* Unmount any previous ISO */
+  if (iso_mounted) { ISO9660_Unmount("ncd:"); iso_mounted = false; }
+  if (iso_fp) { fclose(iso_fp); iso_fp = NULL; }
+
+  /* Open the .iso file via standard stdio (it lives on the FAT fs) */
+  snprintf(Path, sizeof(Path), "%s%s", tmp, iso_name);
+  _iso_file = fopen(Path, "rb");
+  iso_fp = _iso_file;
+  if (!iso_fp) return 0;
+
+  /* Mount it as "ncd:" */
+  if (!ISO9660_Mount("ncd", (DISC_INTERFACE *)&_iso_disc))
+  {
+    fclose(iso_fp); iso_fp = NULL; _iso_file = NULL;
+    return 0;
+  }
+  iso_mounted = true;
+
+  /* Verify IPL.TXT exists inside the ISO */
+  fp = GEN_fopen("ncd:/IPL.TXT", "rb");
+  if (!fp)
+  {
+    ISO9660_Unmount("ncd:"); iso_mounted = false;
+    fclose(iso_fp); iso_fp = NULL; _iso_file = NULL;
+    return 0;
+  }
   GEN_fclose(fp);
+
+  /* Set cdpath to the ISO9660 mount root */
+  strcpy(cdpath, "ncd:/");
+
+  strncpy(iso_dir, tmp, sizeof(iso_dir) - 1);
 
   return 1;
 }

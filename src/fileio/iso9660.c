@@ -1,694 +1,266 @@
 /****************************************************************************
-* ISO 9660 Parser
+* ISO 9660 - libogc DISC_INTERFACE wrapper
+*
+* Replaces the original raw hardware register-based ISO9660 parser with
+* libogc's ISO9660_Mount abstraction. This allows the DVD path to work
+* correctly with ODEs (GCLoader, cubeODE) as well as real drives.
+*
+* Based on DVD mounting technique from Genesis-Plus-GX (Eke-Eke).
 ****************************************************************************/
 
 #include <gccore.h>
+#include <ogcsys.h>
+#include <ogc/dvd.h>
+/* ISO9660_Mount/Unmount — the system <iso9660.h> is shadowed by the project's
+ * own src/fileio/iso9660.h, so we declare these directly instead of including. */
+bool ISO9660_Mount(const char *name, DISC_INTERFACE *iface);
+bool ISO9660_Unmount(const char *name);
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <malloc.h>
-#include <ogcsys.h>
-#include <ogc/mutex.h>
-
-#include "neocdrx.h"
+#include <strings.h>
+#include <unistd.h>
+#include <sys/dir.h>
+#include <sys/stat.h>
 
 #ifdef HW_RVL
 #include <di/di.h>
 #endif
 
-#define MAXCACHED 128
-#define SECTORSIZE 2048
+#include "iso9660.h"
 
-#define GCMAXCAPACITY   0x57057C00ULL
-#define WIIMAXCAPACITY  4699979776ULL
-
-/** DVD I/O Address base **/
-volatile unsigned long *dvd = (volatile unsigned long *) 0xCC006000;
-
-#ifndef HW_RVL
-static u32 dvdmutex = 0;
-#endif
-
-static char dvdbuffer[SECTORSIZE] ATTRIBUTE_ALIGN (32);
-static PVD pvd;
-static char *pathtable;
-static char *pathdecs;
-static int pdeclength;
-static int pathentries;
-static int joliet = 0;
-
-static void dumppathtable (void);
-static void DecodePathTable (void);
-static CACHEFILE cachedfiles[MAXCACHED];
-static int cached = 0;
-
-#ifndef HW_RVL
-/* GC/Wii integration */
-typedef struct
-  {
-    u16 rev;
-    u16 dev;
-    u32 reldate;
-    u8 pad[24];
-  }
-DVDDriveInfo;
-
-static DVDDriveInfo dinfo ATTRIBUTE_ALIGN(32);
-#endif
-
-static long long int DVDMaxCapacity = 0;
-#include <unistd.h>
-#include <strings.h>
-
-
-/****************************************************************************
-* SetDriveCapacity
-****************************************************************************/
-static void
-SetDriveCapacity( void )
-{
-#ifndef HW_RVL
-  /* Get DVD Info */
-  DCInvalidateRange((void *)&dinfo, 32);
-
-  dvd[0] = 0x2E;
-  dvd[1] = dvd[3] = 0;
-  dvd[2] = 0x12000000;
-  dvd[4] = dvd[6] = 0x20;
-  dvd[5] = (u32)&dinfo;
-  dvd[7] = 3;
-
-  while( dvd[7] & 1 );
-
-   InfoScreen((char *) " ");  
-
-// WKF dinfo.reldate is detected as 537330195
-   if ((dinfo.reldate == 537330195) && (__wkfSpiReadId() != 0 && __wkfSpiReadId() != 0xFFFFFFFF) && (wkfIsInserted(0) == true) ){
-     ActionScreen ((char *) "Remove WKF SDcard to enable Flatmode");
-     __wkfReset();
-     SetDriveCapacity();
-  }
-
-
-
-  switch( dinfo.reldate )
-    {
-      /* Known GC Drives */
-    case 0x20020402:	/* Model 04 */
-    case 0x20010608:	/* Model 06 */
-    case 0x20020823:	/* Model 08 */
-    case 0x20010831:	/* Panasonic */
-//     DVD_Reset(DVD_RESETHARD);
-      DVDMaxCapacity = GCMAXCAPACITY;
-      break;
-
-    default:
-      DVDMaxCapacity = WIIMAXCAPACITY;	/* Assume Wii */
-    }
+/* DVD DISC_INTERFACE — libogc provides __io_gcdvd / __io_wiidvd */
+#ifdef HW_RVL
+static DISC_INTERFACE *dvd_disc = (DISC_INTERFACE *)&__io_wiidvd;
 #else
-  DVDMaxCapacity = WIIMAXCAPACITY;
+static DISC_INTERFACE *dvd_disc = (DISC_INTERFACE *)&__io_gcdvd;
 #endif
-}
+
+static int dvdInited  = 0;
+static int dvdMounted = 0;
 
 /****************************************************************************
- * dvd_motor_off
- ****************************************************************************/
-void dvd_motor_off( void )
-{
-#ifndef HW_RVL
-  dvd[0] = 0x2e;
-  dvd[1] = 0;
-  dvd[2] = 0xe3000000;
-  dvd[3] = 0;
-  dvd[4] = 0;
-  dvd[5] = 0;
-  dvd[6] = 0;
-  dvd[7] = 1; // Do immediate
-  while (dvd[7] & 1) usleep(10);
-
-  /*** PSO Stops blackscreen at reload ***/
-  dvd[0] = 0x14;
-  dvd[1] = 0;
-
-#else
-  DI_StopMotor();
-#endif
-}
-
-/****************************************************************************
-* GCSim64
-****************************************************************************/
-int gcsim64( void *buffer, long long int offset, int length )
-{
-
-#ifndef HW_RVL
-  while ( LWP_MutexLock( dvdmutex ) != 0 )
-    usleep(50);
-#endif
-
-  DCInvalidateRange ((void *) buffer, length);
-
-  if ( offset < DVDMaxCapacity )
-    {
-#ifndef HW_RVL
-      dvd[0] = 0x2E;
-      dvd[1] = 0;
-      dvd[2] = 0xA8000000;
-
-      u32 ofs = offset >> 2;
-      dvd[3] = ofs;
-
-      dvd[4] = length;
-      dvd[5] = (unsigned long) buffer;
-      dvd[6] = length;
-      dvd[7] = 3;			/*** Enable reading with DMA ***/
-      while (dvd[7] & 1);
-
-      if (dvd[0] & 0x4)		/* Ensure it has completed */
-        {
-          LWP_MutexUnlock( dvdmutex );
-          return 0;
-        }
-
-#else
-    if (DI_ReadDVD(buffer, length >> 11, (u32)(offset >> 11)))
-        return 0;
-#endif
-    }
-  else				// Let's not read past end of DVD
-    {
-      ActionScreen ((char *) "Offset exceeds Capacity!");
-#ifndef HW_RVL
-      LWP_MutexUnlock( dvdmutex );
-#endif
-  return 0;
-    }
-
-#ifndef HW_RVL
-  LWP_MutexUnlock( dvdmutex );
-#endif
-  return 1;
-
-}
-
-#ifndef HW_RVL
-/****************************************************************************
-* FlushXenoCache
+* is_ode
 *
-* Flush the read cache on Xeno to ensure that any later data is correct.
+* Detect whether the drive is an ODE (GCLoader, cubeODE, etc.) or a real
+* optical drive. After DVD_Init, real Panasonic/Philips/Sanyo drives identify
+* themselves via the version register (offset 0x24 / word 9). They return
+* non-zero drive codes; ODEs return 0x00000000.
+*
+* Returns 1 if an ODE is detected, 0 for a real drive or unknown.
+*
+* Only meaningful on GC (non-HW_RVL); on Wii DI is used instead.
 ****************************************************************************/
-static void
-FlushXenoCache( void )
+#ifndef HW_RVL
+int is_ode(void)
 {
-  u8 *cache;
+    volatile unsigned long *dvd_reg = (volatile unsigned long *)0xCC006000;
+    unsigned long drive_code;
 
-  cache = memalign(32,0x10000);
-
-  /* Step 1 - read 64K from offset zero */
-  gcsim64(cache, 0LL, 0x10000);
-
-  /* Step 2 - read from > 4MB */
-  gcsim64(cache, 0x400800, 0x10000);
-
-  free(cache);
+    /* Drive version is in the high byte of register 9 (byte offset 0x24).
+     * Real drives: Panasonic=0x20xxxxxx, Philips=0x10xxxxxx, Sanyo=0x30xxxxxx
+     * GCLoader / cubeODE: returns 0x00000000 */
+    drive_code = dvd_reg[9] >> 24;
+    return (drive_code == 0x00) ? 1 : 0;
 }
+#else
+int is_ode(void) { return 0; }
 #endif
+
+/*
+ * Persistent storage for subdirectory names returned by GetSubDirectories.
+ * Pointers into this array are stored in dirbuffer and read back by DirSelector.
+ */
+#define MAX_SUBDIRS  512
+#define MAX_DIRNAME  256
+static char subdirnames[MAX_SUBDIRS][MAX_DIRNAME];
+
+#ifndef HW_RVL
+/*
+ * The libogc GC DVD DISC_INTERFACE has broken startup/isInserted stubs.
+ * Patch them at runtime — technique taken from Genesis-Plus-GX.
+ */
+static bool patchedStartup(DISC_INTERFACE *disc)
+{
+    (void)disc;
+    DVD_Mount();
+    return true;
+}
+
+static bool patchedIsInserted(DISC_INTERFACE *disc)
+{
+    (void)disc;
+    return true;
+}
+#endif /* !HW_RVL */
 
 /****************************************************************************
-* Mount Image
+* mount_image
+*
+* Initialise the DVD interface and mount the disc via libogc ISO9660.
+* Returns 1 on success, 0 on failure.
 ****************************************************************************/
-int
-mount_image (void)
+int mount_image(void)
 {
-  int sector = 15;
-  int iso9660 = 0;
-  int i;
-
-#ifndef HW_RVL
-  static int have_mutex = 0;
-  if ( !have_mutex )
+    if (!dvdInited)
     {
-      LWP_MutexInit( &dvdmutex, FALSE );
-      have_mutex = 1;
-    }
+#ifdef HW_RVL
+        DI_Init();
+#else
+        DVD_Init();
+        /* Patch the broken GC stubs so ISO9660_Mount can work */
+        *(FN_MEDIUM_STARTUP    *)&dvd_disc->startup    = patchedStartup;
+        *(FN_MEDIUM_ISINSERTED *)&dvd_disc->isInserted = patchedIsInserted;
 #endif
+        dvdInited = 1;
+    }
 
-  /* Set drive capacity */
-  SetDriveCapacity();
-
-#ifndef HW_RVL
-  /* Xeno */
-  FlushXenoCache();
-#endif
-
-  memset (&pvd, 0, sizeof (PVD));
-  memset (&cachedfiles, 0, sizeof (CACHEFILE) * MAXCACHED);
-
-  /*** Find PVD ***/
-  while (sector < 64)
+    /* Unmount any existing mount first */
+    if (dvdMounted)
     {
-      if( !gcsim64 (dvdbuffer, (long long int)sector * SECTORSIZE, SECTORSIZE) )
-      {
+        ISO9660_Unmount("dvd:");
+        dvdMounted = 0;
+    }
+
+    /* Check disc presence */
+    if (!dvd_disc->isInserted(dvd_disc))
+    {
         return 0;
-      }
-
-      if ((memcmp (dvdbuffer, "\2CD001\1", 8)) == 0)
-        {
-          joliet = 1;
-
-          /*** Fixup for text strings ***/
-          for (i = 0; i < 32; i++)
-            dvdbuffer[i + SYSID] = dvdbuffer[((i << 1) + 1) + SYSID];
-          for (i = 0; i < 32; i++)
-            dvdbuffer[i + VOLID] = dvdbuffer[((i << 1) + 1) + VOLID];
-          for (i = 0; i < 128; i++)
-            dvdbuffer[i + VOLSETID] = dvdbuffer[((i << 1) + 1) + VOLSETID];
-          for (i = 0; i < 128; i++)
-            dvdbuffer[i + PUBSETID] = dvdbuffer[((i << 1) + 1) + PUBSETID];
-          for (i = 0; i < 128; i++)
-            dvdbuffer[i + APPSETID] = dvdbuffer[((i << 1) + 1) + APPSETID];
-          for (i = 0; i < 128; i++)
-            dvdbuffer[i + DATASETID] = dvdbuffer[((i << 1) + 1) + DATASETID];
-
-          break;
-        }
-      sector++;
     }
 
-  if (!joliet)
-    {
-      sector = 15;
-      while (sector < 64)
-        {
-          if ( !gcsim64 (dvdbuffer, (long long int)sector * SECTORSIZE, SECTORSIZE) );
-          {
-            return 0;
-          }
-
-          if ((memcmp (dvdbuffer, "\1CD001\1", 8)) == 0)
-            {
-              iso9660 = 1;
-              break;
-            }
-          sector++;
-        }
-    }
-
-  if (!(joliet + iso9660))
-    {
-      ActionScreen((char *) "Unsupported disc format !");
-      return 0;
-    }
-
-  pvd.pvdoffset = sector * SECTORSIZE;
-  memcpy (&pvd.rootoffset, dvdbuffer + PVDROOT + EXTENT, 4);
-  memcpy (&pvd.rootlength, dvdbuffer + PVDROOT + FILE_LENGTH, 4);
-  memcpy (&pvd.pathtablelength, dvdbuffer + PTABLELENGTH, 4);
-  memcpy (&pvd.pathtableoffset, dvdbuffer + PTABLEOFFSET, 4);
-
-  memcpy (pvd.system_id, dvdbuffer + SYSID, 32);
-  memcpy (pvd.volume_id, dvdbuffer + VOLID, 32);
-  memcpy (pvd.volset_id, dvdbuffer + VOLSETID, 128);
-  memcpy (pvd.pubset_id, dvdbuffer + PUBSETID, 128);
-  memcpy (pvd.appset_id, dvdbuffer + APPSETID, 128);
-  memcpy (pvd.dataset_id, dvdbuffer + DATASETID, 128);
-
-  pvd.rootoffset = pvd.rootoffset * SECTORSIZE;
-  pvd.pathtableoffset = pvd.pathtableoffset * SECTORSIZE;
-
-  pvd.pathtablelength &= ~0x1f;
-  pvd.pathtablelength += 64;
-
-  if (!pathtable) pathtable = memalign (32, pvd.pathtablelength);
-  if (!pathtable) return 0;
-  memset (pathtable, 0, pvd.pathtablelength);
-
-  /*** How many blocks ***/
-  int blocks = pvd.pathtablelength / SECTORSIZE;
-  int bytesdone = 0;
-
-  if (blocks)
-    {
-      for (i = 0; i < blocks; i++)
-        {
-          if ( !gcsim64 (dvdbuffer,
-                   (long long int)pvd.pathtableoffset + bytesdone,
-                   SECTORSIZE))
-          {
-            ActionScreen((char *) "Error reading pathtable sector !");
-            return 0;
-          }
-          memcpy (pathtable + bytesdone, dvdbuffer, SECTORSIZE);
-          bytesdone += SECTORSIZE;
-        }
-    }
-
-  /*** Get remaining bytes ***/
-  int remain = pvd.pathtablelength % SECTORSIZE;
-  if (remain)
-    {
-      if ( !gcsim64 (dvdbuffer,
-              (long long int)pvd.pathtableoffset + bytesdone,
-              SECTORSIZE))
-      {
-        ActionScreen((char *) "Error reading pathtable last sector !");
+    /* Mount via libogc — works with real drives and ODEs alike */
+    if (!ISO9660_Mount("dvd", dvd_disc))
         return 0;
-      }
-      memcpy (pathtable + bytesdone, dvdbuffer, remain);
-    }
 
-  dumppathtable ();
-  DecodePathTable ();
-
-  return 1;
-
+    dvdMounted = 1;
+    return 1;
 }
 
 /****************************************************************************
 * unmount_image
 ****************************************************************************/
-void
-unmount_image (void)
+void unmount_image(void)
 {
-  if (pathdecs) free (pathdecs);
-  if (pathtable) free (pathtable);
+    if (dvdMounted)
+    {
+        ISO9660_Unmount("dvd:");
+        dvdMounted = 0;
+    }
+}
+
+/****************************************************************************
+* dvd_motor_off
+*
+* Stop the disc motor on real drives. On ODEs (GCLoader etc.) this is
+* effectively a no-op since there is no physical drive motor.
+****************************************************************************/
+void dvd_motor_off(void)
+{
 #ifndef HW_RVL
-  if (dvdmutex) LWP_MutexDestroy(dvdmutex);
+    /* Send motor-off command directly via DVD register interface.
+     * DVD_StopMotor() does not exist in libogc2. */
+    volatile unsigned long *dvd = (volatile unsigned long *)0xCC006000;
+    dvd[0] = 0x2e;
+    dvd[1] = 0;
+    dvd[2] = 0xe3000000;
+    dvd[3] = 0; dvd[4] = 0; dvd[5] = 0; dvd[6] = 0;
+    dvd[7] = 1;
+    while (dvd[7] & 1) usleep(10);
+#else
+    DI_StopMotor();
 #endif
 }
 
 /****************************************************************************
-* Dump Path Table
-****************************************************************************/
-static void
-dumppathtable (void)
-{
-  PATHHDR *phdr;
-  char *pname;
-  int pos;
-  int ofs = 0;
-
-  phdr = (PATHHDR *) pathtable;
-  pathentries = pdeclength = 0;
-
-  while (phdr->nlength)
-    {
-      pname = (char *) phdr + (sizeof (PATHHDR));
-      if (pname == NULL) { } 
-      
-      pos = sizeof (PATHHDR) + phdr->nlength;
-      if (phdr->nlength & 1)
-        pos++;
-
-      ofs += pos;
-      pathentries++;
-      pdeclength += (phdr->nlength + 1);
-
-      phdr = (PATHHDR *) (pathtable + ofs);
-    }
-}
-
-/****************************************************************************
-* Decode Path Table
+* GetSubDirectories
 *
-* *WARNING* - This reuses the pathtable block as a string holder.
-****************************************************************************/
-static void
-DecodePathTable (void)
-{
-  PATHHDR *phdr = (PATHHDR *) pathtable;
-  PATHDECODE *pdec;
-  int i, j, ph;
-  int ofs, pos;
-  char *pname;
-  int strofs = 0;
-
-  if (!pathdecs) pathdecs = memalign (32, pathentries * sizeof (PATHDECODE));
-  memset (pathdecs, 0, (pathentries * sizeof (PATHDECODE)));
-  pdec = (PATHDECODE *) pathdecs;
-  ofs = pos = strofs = 0;
-
-  /*** Decode path information ***/
-  for (i = 0; i < pathentries; i++)
-    {
-      pname = (char *) phdr + sizeof (PATHHDR);
-      pos = sizeof (PATHHDR) + phdr->nlength;
-      if (phdr->nlength & 1)
-        pos++;
-
-      pdec[i].offset64 = (long long int)phdr->record * 2048;
-      pdec[i].parent = phdr->parent;
-      pdec[i].path = (char *) (pathtable + strofs);
-      ph = phdr->nlength;
-
-      if (!joliet)
-        {
-          for (j = 0; j < ph; j++)
-            pathtable[strofs++] = pname[j];
-        }
-      else
-        {
-          for (j = 0; j < ph >> 1; j++)
-            pathtable[strofs++] = pname[(j << 1) + 1];
-        }
-
-      pathtable[strofs++] = 0;
-
-      ofs += pos;
-      phdr = (PATHHDR *) (pathtable + ofs);
-
-    }
-
-}
-
-/****************************************************************************
-* FindDirectory
-****************************************************************************/
-static int
-FindDirectory (char *dir)
-{
-  char work[2048];
-  char *p;
-  int parent = 1;
-  int i, found;
-  PATHDECODE *pdec = (PATHDECODE *) pathdecs;
-
-  strcpy (work, dir);
-
-  p = strtok (work, "/");
-  if (p == NULL)
-    return -1;
-
-  while (p != NULL)
-    {
-      found = 0;
-
-      for (i = 0; i < pathentries; i++)
-        {
-          if (pdec[i].parent == parent)
-            {
-              if (strcasecmp (p, pdec[i].path) == 0)
-                {
-                  parent = i + 1;
-                  found = 1;
-                  break;
-                }
-            }
-        }
-
-      if (found)
-        p = strtok (NULL, "/");
-      else
-        return -1;
-    }
-
-  return parent;
-
-}
-
-/****************************************************************************
-* GetSubdirectories
-****************************************************************************/
-void
-GetSubDirectories (char *dir, char *buf, int len)
-{
-  int parent;
-  int i;
-  int count = 0;
-  int ofs = 4;
-
-  PATHDECODE *pdec = (PATHDECODE *) pathdecs;
-
-  memset (buf, 0, len);
-
-  if (strcasecmp (dir, "/") == 0)
-    parent = 1;
-  else
-    parent = FindDirectory (dir);
-
-  if (parent < 0)
-    return;
-
-  /*** Look for children of this directory ***/
-  for (i = 0; i < pathentries; i++)
-    {
-      if ((pdec[i].parent == parent) && (strlen (pdec[i].path)))
-        {
-          memcpy (buf + ofs, &pdec[i].path, 4);
-          ofs += 4;
-          if (ofs > len)
-            break;
-#if 0
-          strcat (buf, pdec[i].path);
-          strcat (buf, "|");
-#endif
-          count++;
-        }
-    }
-
-  memcpy (buf, &count, 4);
-
-}
-
-/****************************************************************************
-* Search Cache
-****************************************************************************/
-static int
-SearchCache (char *filename)
-{
-  int i;
-
-  for (i = 0; i < MAXCACHED; i++)
-    {
-      if (strcasecmp (cachedfiles[i].fname, filename) == 0)
-        return i;
-    }
-
-  return -1;
-}
-
-/****************************************************************************
-* FindFile
+* List subdirectories of 'dir' (e.g. "/" or "/GAME") into buf using the
+* same packed format expected by DirSelector:
 *
-* Attempt to locate a file and return it's structure
+*   buf[0..3]   = int count of entries
+*   buf[4..7]   = char* pointer to name of entry 0
+*   buf[8..11]  = char* pointer to name of entry 1
+*   ...
+*
+* Pointers point into the persistent subdirnames[][] array.
 ****************************************************************************/
-DIRENTRY *
-FindFile (char *filename)
+void GetSubDirectories(char *dir, char *buf, int len)
 {
-  int d, i;
-  char work[1024];
-  char dir[1024];
-  char file[1024];
-  char cfile[1024];
-  char *pname;
-  int ofs = 0;
-  PATHDECODE *pdec = (PATHDECODE *) pathdecs;
-  DIRENTRY *fdir = (DIRENTRY *) dvdbuffer;
+    char fullpath[512];
+    DIR *d;
+    struct dirent *entry;
+    int count = 0;
+    int ofs   = 4; /* first 4 bytes reserved for count */
 
-  static long long int prevoffset64 = 0;
-  long long int dvdoffset64 = 0;
+    memset(buf, 0, len);
 
-  /*** Search cache ***/
-  d = SearchCache (filename);
-  if (d >= 0)
+    /* Build "dvd:<dir>" — dir always starts with '/' */
+    snprintf(fullpath, sizeof(fullpath), "dvd:%s", dir);
+
+    /* Strip trailing slash unless it is the mount root ("dvd:/") */
+    int plen = strlen(fullpath);
+    if (plen > 5 && fullpath[plen - 1] == '/')
+        fullpath[plen - 1] = '\0';
+
+    d = opendir(fullpath);
+    if (!d)
     {
-      return (DIRENTRY *) & cachedfiles[d].fdir;
+        memcpy(buf, &count, 4);
+        return;
     }
 
-  strcpy (work, filename);
-
-  /*** Find the directory ***/
-  for (i = strlen (work) - 1; i > 0; i--)
+    while ((entry = readdir(d)) != NULL)
     {
-      if (work[i] == '/')
+        if (strcmp(entry->d_name, ".") == 0)  continue;
+        if (strcmp(entry->d_name, "..") == 0) continue;
+
+        /* libogc ISO9660 readdir often returns DT_UNKNOWN — use stat() to
+         * determine if the entry is a directory when d_type is not set. */
+        bool is_dir = (entry->d_type == DT_DIR);
+        if (!is_dir && entry->d_type == DT_UNKNOWN)
         {
-          work[i] = 0;
-          strcpy (dir, work);
-          strcpy (file, &work[i + 1]);
-          break;
+            char entrypath[640];
+            struct stat st;
+            snprintf(entrypath, sizeof(entrypath), "%s/%s", fullpath, entry->d_name);
+            if (stat(entrypath, &st) == 0)
+                is_dir = S_ISDIR(st.st_mode);
         }
+        if (!is_dir) continue;
+
+        if (count >= MAX_SUBDIRS) break;
+        if (ofs + 4 > len) break;
+
+        strncpy(subdirnames[count], entry->d_name, MAX_DIRNAME - 1);
+        subdirnames[count][MAX_DIRNAME - 1] = '\0';
+
+        /* Store pointer value in buf (matches original iso9660.c format) */
+        char *ptr = subdirnames[count];
+        memcpy(buf + ofs, &ptr, 4);
+        ofs += 4;
+        count++;
     }
 
-  d = FindDirectory (dir);
+    closedir(d);
+    memcpy(buf, &count, 4);
+}
 
-  if (d >= 0)
-    {
-      /*** Ok - now have the directory base
-             Go find the file ***/
+/****************************************************************************
+* FindFile / gcsim64
+*
+* Retained as stubs for ABI compatibility. dvdfileio.c has been rewritten
+* to use standard fopen/fread via the dvd: mount point and no longer calls
+* either of these functions.
+****************************************************************************/
+DIRENTRY *FindFile(char *filename)
+{
+    (void)filename;
+    return NULL;
+}
 
-      if (prevoffset64 != pdec[d - 1].offset64)
-        {
-          memset (dvdbuffer, 0, SECTORSIZE);
-          if( !gcsim64 (dvdbuffer, pdec[d - 1].offset64, SECTORSIZE) ) return NULL;
-          prevoffset64 = pdec[d - 1].offset64;
-        }
-
-      while (fdir->nlength)
-        {
-          if (!(fdir->flags & ISDIR))
-            {
-              pname = (char *) (dvdbuffer + ofs + sizeof (DIRENTRY));
-
-              if (!joliet)
-                {
-                  for (i = 0; i < fdir->identifier; i++)
-                    {
-                      if (pname[i] == ';')
-                        break;
-
-                      cfile[i] = pname[i];
-                    }
-                }
-              else
-                {
-                  for (i = 0; i < fdir->identifier >> 1; i++)
-                    {
-                      if (pname[(i << 1) + 1] == ';')
-                        break;
-
-                      cfile[i] = pname[(i << 1) + 1];
-                    }
-                }
-
-              cfile[i] = 0;
-
-              if (strcasecmp (cfile, file) == 0)
-                {
-                  strcpy (cachedfiles[cached].fname, filename);
-                  memcpy (&cachedfiles[cached].fdir, fdir, sizeof (DIRENTRY));
-                  cached++;
-                  if (cached >= MAXCACHED)
-                    cached = 0;
-
-                  return fdir;
-                }
-            }
-
-          ofs += fdir->nlength;
-          fdir = (DIRENTRY *) (dvdbuffer + ofs);
-
-          if (fdir->nlength == 0)
-            {
-              /*** Read next sector ***/
-              dvdoffset64 += SECTORSIZE;
-              if( !gcsim64 (dvdbuffer, pdec[d-1].offset64 + dvdoffset64, SECTORSIZE ) ) return NULL;
-              ofs = 0;
-
-              prevoffset64 = -1;
-
-              fdir = (DIRENTRY *) (dvdbuffer + ofs);
-              if ((fdir->identifier == 1) && (fdir->flags & ISDIR))
-                {
-                  pname = (char *) (dvdbuffer + ofs + sizeof (DIRENTRY));
-                  if (pname[0] == 0)
-                    {
-                      return NULL;
-                    }
-                }
-            }
-        }
-    }
-
-  return NULL;
-
+int gcsim64(void *buffer, long long int offset, int length)
+{
+    (void)buffer;
+    (void)offset;
+    (void)length;
+    return 0;
 }

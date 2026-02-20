@@ -15,6 +15,7 @@
 ****************************************************************************/
 
 #include <gccore.h>
+#include <fat.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -121,6 +122,8 @@ static int restart = 0;
 /****************************************************************************
 * Frameticker
 ****************************************************************************/
+static void pad_retrace_cb(u32 retrace) { (void)retrace; PAD_ScanPads(); }
+
 static void framestart(u32 arg)
 {
 	FrameTicker++;
@@ -266,7 +269,7 @@ int main(void)
 
     VIDEO_SetPreRetraceCallback(framestart);
 
-    VIDEO_SetPostRetraceCallback((VIRetraceCallback)PAD_ScanPads);
+    VIDEO_SetPostRetraceCallback(pad_retrace_cb);
     VIDEO_SetBlack(0);
 
     VIDEO_Flush();
@@ -282,6 +285,11 @@ int main(void)
   WPAD_SetVRes(WPAD_CHAN_ALL,640,480);
 #endif
     
+    /* fatInitDefault() probes all known interfaces (SD Gecko slot A/B, IDE-EXI,
+     * etc.) and is the correct call on both GC and Wii. Swiss patches the FAT
+     * layer before handing off to the DOL, so it requires fatInitDefault() to
+     * be called — bypassing it with explicit fatMountSimple() prevents Swiss
+     * from registering the GCLoader's SD card. */
     fatInitDefault();
 //  load_settings_default(); // eventually add settings ???
     
@@ -310,44 +318,46 @@ int main(void)
 	//SET DEVICE HANDLER and START DEVICE
 	while (!have_ROM) load_mainmenu();
 
-	//  Find BIOS 
-	char bios_dir[25];
-	char bios_dir1[25];
-
-#ifdef HW_RVL
-	if (use_DVD == 1) {
-		sprintf(bios_dir, "NeoCDRX/bios/NeoCD.bin");        // search DVD root for bios - Wii
-		sprintf(bios_dir1,"bios/NeoCD.bin");
-	}
-	else if (use_SD == 1)  {
-		sprintf(bios_dir, "sd:/NeoCDRX/bios/NeoCD.bin");    // search internal SD slot root for bios - Wii
-		sprintf(bios_dir1,"sd:/bios/NeoCD.bin");
-	}
-	else if (use_USB == 1)   {
-		sprintf(bios_dir, "usb:/NeoCDRX/bios/NeoCD.bin");    // search USB root for bios - Wii
-		sprintf(bios_dir1,"usb:/bios/NeoCD.bin");
-	}
-#else
-		sprintf(bios_dir, "NeoCDRX/bios/NeoCD.bin");        // always use SD Gecko slot for bios - GC
-		sprintf(bios_dir1,"bios/NeoCD.bin");
-#endif
-
 	/*** Retrieving NEOGEOCD backup memory ***/
 	memset(neogeo_memorycard, 0, 8192);
 	neogeo_get_memorycard();
 
-    /*** Loading BIOS ***/
-	fp = GEN_fopen(bios_dir, "rb");
-    if (!fp) {
-		fp = GEN_fopen(bios_dir1, "rb");
-		if (!fp) {
+	//  Find BIOS
+	/* On GC, Swiss/fatInitDefault mounts the SD card (GCLoader or SD Gecko)
+	 * as the root filesystem. Bare paths like "/NeoCDRX/bios/NeoCD.bin" work;
+	 * "sd:/..." does NOT — sd: is not a registered mount point on GC.
+	 * On Wii, fatInitDefault registers "sd:" normally so both are tried. */
+	{
+		const char *bios_paths[] = {
+			"gcode:/NeoCDRX/bios/NeoCD.bin", /* GC: GCLoader SD card via __io_gcode */
+			"gcode:/bios/NeoCD.bin",
+			"sd:/NeoCDRX/bios/NeoCD.bin",    /* GC: SD Gecko / Wii: internal SD */
+			"sd:/bios/NeoCD.bin",
+			"fat:/NeoCDRX/bios/NeoCD.bin",   /* GC: alternate libfat prefix */
+			"fat:/bios/NeoCD.bin",
+			"usb:/NeoCDRX/bios/NeoCD.bin",   /* Wii: USB */
+			"usb:/bios/NeoCD.bin",
+			"dvd:/NeoCDRX/bios/NeoCD.bin",   /* real optical drive */
+			"dvd:/bios/NeoCD.bin",
+			NULL
+		};
+		FILE *bios_fp = NULL;
+		int bi;
+		for (bi = 0; bios_paths[bi] != NULL; bi++) {
+			bios_fp = fopen(bios_paths[bi], "rb");
+			if (bios_fp) break;
+		}
+		if (!bios_fp) {
 			ActionScreen((char *) "BIOS not found!");
 			neogeocd_exit();
 		}
+		fread((char *)neogeo_rom_memory, 1, ROM_MEM, bios_fp);
+		fclose(bios_fp);
 	}
 
-	GEN_fread((char *)neogeo_rom_memory, 1, ROM_MEM, fp);
-	GEN_fclose(fp);
+
+
+
 
 	//  Check BIOS
 	crc = crc32(0, neogeo_rom_memory, ROM_MEM);

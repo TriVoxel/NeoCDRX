@@ -178,13 +178,16 @@ static s8 WPAD_StickY(int chan, int right)
 
 u16 getMenuButtons(void)
 {
-  
-  /* Slowdown input updates */
+  static u32 last_held = 0;
+
+  /* Slowdown input updates — retrace callback handles PAD_ScanPads() */
   VIDEO_WaitVSync();
-  
-  /* Get gamepad inputs */
-  PAD_ScanPads();
-  u16 p = PAD_ButtonsDown(0);
+
+  /* Compute edge-triggered buttons from held state */
+  u32 held = PAD_ButtonsHeld(0);
+  u32 p = held & ~last_held;   /* bits newly pressed this frame */
+  last_held = held;
+
   s8 x  = PAD_StickX(0);
   s8 y  = PAD_StickY(0);
   if (x > 70) p |= PAD_BUTTON_RIGHT;
@@ -405,7 +408,7 @@ startsel (unsigned short p)
 void
 update_input (void)
 {
-  unsigned short p;
+  u32 p;
   unsigned int t;
 
   if (!accept_input)

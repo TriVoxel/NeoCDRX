@@ -18,7 +18,7 @@
 #define MC_COMMENT1 "NeoCD RX 1.5"
 #define MC_COMMENT2 "CD Memory Card Save"
 
-static u8 SysArea[CARD_WORKAREA_SIZE] ATTRIBUTE_ALIGN (32);
+static u8 SysArea[CARD_WORKAREA] ATTRIBUTE_ALIGN (32);
 static u8 mcardbuffer[MC_SIZE] ATTRIBUTE_ALIGN (32);
 static card_dir CardDir;
 static card_file CardFile;
@@ -36,7 +36,7 @@ MountMemCard (void)
   int CardError;
   int retries = 0;
 
-  memset (SysArea, 0, CARD_WORKAREA_SIZE);
+  memset (SysArea, 0, CARD_WORKAREA);
 
   while (retries < 10)
     {
@@ -76,7 +76,7 @@ CardFileExists (char *filename)
   CardError = CARD_FindFirst (cardslot, &CardDir, TRUE);
   while (CardError != CARD_ERROR_NOFILE)
     {
-      if (strcmp ((char *) CardDir.filename, filename) == 0)
+      if (strcasecmp ((char *) CardDir.filename, filename) == 0)
 	return 1;
 
       CardError = CARD_FindNext (&CardDir);
@@ -144,28 +144,28 @@ if (SaveDevice == 0)
 	}
     }
 }
-else //SD Card
+else /* SD / ODE (SaveDevice==1) — both use same path */
 {
   FILE *fp;
   int Readed;
 
+  /* SaveDevice 1 = SD / ODE */
+  /* On GC, SD is mounted at root "/"; on Wii "sd:" is valid.
+   * Try bare path first so this works on both. */
   fp = fopen("/NeoCDRX/NeoCDRXsave.bin", "rb");
+  if (!fp) fp = fopen("sd:/NeoCDRX/NeoCDRXsave.bin", "rb");
   if (!fp)
     {
-      // file does not exist, try to create it
+      /* file does not exist, try to create it */
       neogeo_set_memorycard();
-
       return 0;
     }
 
-    Readed = fread(neogeo_memorycard, 1, 8192, fp);
+  Readed = fread(neogeo_memorycard, 1, 8192, fp);
+  fclose(fp);
 
-    fclose(fp);
-
-    if (Readed == 8192)
-      {
-	return 1;
-      }
+  if (Readed == 8192)
+    return 1;
 }
 
   return 0;
@@ -249,26 +249,22 @@ if (SaveDevice == 0)
       return 1;
     }
 }
-else //SD Card
+else /* SD / ODE (SaveDevice==1) — both use same path */
 {
-
   FILE *fp;
   int Written;
 
+  /* On GC, SD is mounted at root "/"; on Wii "sd:" is valid. */
   fp = fopen("/NeoCDRX/NeoCDRXsave.bin", "wb");
+  if (!fp) fp = fopen("sd:/NeoCDRX/NeoCDRXsave.bin", "wb");
   if (!fp)
-    {
-      return 0;
-    }
+    return 0;
 
-    Written = fwrite(neogeo_memorycard, 1, 8192, fp);
+  Written = fwrite(neogeo_memorycard, 1, 8192, fp);
+  fclose(fp);
 
-    fclose(fp);
-
-    if (Written == 8192)
-      {
-	return 1;
-      }
+  if (Written == 8192)
+    return 1;
 }
   return 0;
 }

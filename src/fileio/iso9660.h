@@ -107,5 +107,6 @@ extern void GetSubDirectories (char *dir, char *buf, int len);
 extern DIRENTRY *FindFile (char *filename);
 extern int gcsim64( void *buffer, long long int offset, int length );
 extern void dvd_motor_off(void);
+extern int is_ode(void);
 
 #endif

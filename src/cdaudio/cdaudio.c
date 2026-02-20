@@ -432,3 +432,4 @@ static int DecodeNextFrame(int samples)
     }
   return OutputPtr - madOutBuffer;		  /*** Signal end ***/
 }
+

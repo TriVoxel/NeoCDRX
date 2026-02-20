@@ -11,6 +11,8 @@
 #include <math.h>
 #include <zlib.h>
 #include "neocdrx.h"
+#include "iso9660.h"
+#include <ogc/dvd.h>
 #include "backdrop.h"
 #include "banner.h"
 
@@ -33,7 +35,7 @@ static unsigned char background[1280 * 480] ATTRIBUTE_ALIGN (32);
 static unsigned char bannerunc[banner_WIDTH * banner_HEIGHT * 2] ATTRIBUTE_ALIGN (32);
 static void unpack (void);
 
-unsigned short SaveDevice = 1;           // default save location to SD card
+unsigned short SaveDevice = 1;           // 0=MemCard, 1=SD/ODE
 int use_SD  = 0;
 int use_USB = 0;
 int use_IDE = 0;
@@ -531,31 +533,38 @@ int DoMenu (char items[][22], int maxitems)
 ****************************************************************************/
 int ChooseMemCard (void)
 {
-  char titles[5][25] = { {"RXsave.bin not found\0"}, {"choose a save location\0"}, {"\0"}, {"A - SD Gecko   \0"}, {"B - Memory Card\0"} };
+  char titles[5][30];
   int i;
   int quit = 0;
   short joy;
-  
-   DrawScreen ();
 
-   fgcolour = COLOR_WHITE;
-   bgcolour = BMPANE;
+  strncpy(titles[0], "RXsave.bin not found",    29);
+  strncpy(titles[1], "choose a save location",   29);
+  strncpy(titles[2], "",                         29);
+  strncpy(titles[3], "A - SD / ODE",             29);
+  strncpy(titles[4], "B - Memory Card",          29);
 
-   for (i = 0; i < 5; i++) gprint ((640 - (strlen (titles[i]) * 16)) >> 1, 192 + (i * 32), titles[i], TXT_DOUBLE);
+  DrawScreen ();
 
-   ShowScreen ();
+  fgcolour = COLOR_WHITE;
+  bgcolour = BMPANE;
 
-   while (!quit)
-   {
-      joy = getMenuButtons();
-      if (joy & PAD_BUTTON_A)
-        SaveDevice = 1;
-        quit = 1;
+  for (i = 0; i < 5; i++) gprint ((640 - (strlen (titles[i]) * 16)) >> 1, 192 + (i * 32), titles[i], TXT_DOUBLE);
 
-      if (joy & PAD_BUTTON_B)
-        SaveDevice = 0;
-        quit = 1;
-   }
+  ShowScreen ();
+
+  while (!quit)
+  {
+    joy = getMenuButtons();
+    if (joy & PAD_BUTTON_A) {
+      SaveDevice = 1;  /* SD / ODE — both use same sd:/gcode: path */
+      quit = 1;
+    }
+    if (joy & PAD_BUTTON_B) {
+      SaveDevice = 0;             /* Memory Card */
+      quit = 1;
+    }
+  }
 
   return 1;
 }
@@ -622,49 +631,47 @@ int optionmenu()
   int prevmenu = menu;
   int quit = 0;
   int ret;
-  //mega = 1;
-  char buf[22];
+  /* 2 save options: SD/ODE and Memory Card */
+  int num_save_devices = 2;
   int count = 4;
-  static char items[4][22] = 
-  {
-    { "Region:           USA" },
-    { "Save Device:   SD/USB" },
-    { "FX / Music Equalizer" },
-    { "Go Back" }
-  };
+  char items[4][22];
 
   menu = 0;
 
   while (quit == 0)
   {
-    if (neogeo_region == 0) sprintf(items[0], "Region:         JAPAN");
-      else if (neogeo_region == 1) sprintf(items[0], "Region:           USA");
-      else sprintf(items[0], "Region:        EUROPE");
+    if (neogeo_region == 0)      sprintf(items[0], "Region:         JAPAN");
+    else if (neogeo_region == 1) sprintf(items[0], "Region:           USA");
+    else                         sprintf(items[0], "Region:        EUROPE");
 
-    if (SaveDevice == 1) sprintf(items[1], "Save Device:   SD/USB");
-    else sprintf(items[1], "Save Device: MEM Card");
+    if (SaveDevice == 0) sprintf(items[1], "Save Device: MEM Card");
+    else                 sprintf(items[1], "Save Device:  SD/ODE");
+
+    strncpy(items[2], "FX / Music Equalizer", 21);
+    strncpy(items[3], "Go Back",              21);
 
     ret = DoMenu (&items[0], count);
     switch (ret)
     {
-      case 0:	// BIOS Region
-         neogeo_region++;
-         if ( neogeo_region > 2 ) neogeo_region = 0;
+      case 0:   // BIOS Region
+        neogeo_region++;
+        if (neogeo_region > 2) neogeo_region = 0;
         break;
 
-      case 1:	// Save Device location
-        SaveDevice ^= 1;
+      case 1:   // Save Device — cycle through available options
+        SaveDevice++;
+        if (SaveDevice >= num_save_devices) SaveDevice = 0;
         break;
 
       case 2:
         audiomenu();
         break;
 
-      case -1:	// Go Back
+      case -1:  // Go Back
       case 3:
-         quit = 1;
-         break;
-	}
+        quit = 1;
+        break;
+    }
   }
   menu = prevmenu;
   return 0;
@@ -693,19 +700,48 @@ int loadmenu ()
     {"Go Back"}
   };
 #else
-  count = 6;
-  char item[6][22] = {
-    {"Load from SD"},
-    {"Load from IDE-EXI"},
-    {"Load from WKF"},
-    {"Load from DVD"},
-    {"Stop DVD Motor"},
-    {"Go Back"}
-  };
+  /* Probe drive identity so we can label the button correctly.
+   * DVD_Init must be called before is_ode() reads the version register. */
+  DVD_Init();
+  int ode_detected = is_ode();
+
+  /*
+   * ODE menu (5 items) — ODE at top, no Stop Motor:
+   *   0: Load from ODE
+   *   1: Load from SD
+   *   2: Load from IDE-EXI
+   *   3: Load from WKF
+   *   4: Go Back
+   *
+   * Real drive menu (6 items) — DVD in original position:
+   *   0: Load from SD
+   *   1: Load from IDE-EXI
+   *   2: Load from WKF
+   *   3: Load from DVD
+   *   4: Stop DVD Motor
+   *   5: Go Back
+   */
+  /* When ODE detected, omit DVD options (no physical drive).
+   * "Load from SD" already browses the ODE card, so no separate ODE entry. */
+  count = ode_detected ? 4 : 6;
+  char item[6][22];
+  if (ode_detected) {
+    strncpy(item[0], "Load from SD",      21);
+    strncpy(item[1], "Load from IDE-EXI", 21);
+    strncpy(item[2], "Load from WKF",     21);
+    strncpy(item[3], "Go Back",           21);
+  } else {
+    strncpy(item[0], "Load from SD",      21);
+    strncpy(item[1], "Load from IDE-EXI", 21);
+    strncpy(item[2], "Load from WKF",     21);
+    strncpy(item[3], "Load from DVD",     21);
+    strncpy(item[4], "Stop DVD Motor",    21);
+    strncpy(item[5], "Go Back",           21);
+  }
 #endif
 
   menu = load_menu;
-  
+
   while (quit == 0)
   {
      use_SD  = 0;
@@ -714,10 +750,46 @@ int loadmenu ()
      use_WKF = 0;
      use_DVD = 0;
      ret = DoMenu (&item[0], count);
+
+#ifndef HW_RVL
+     if (ode_detected) {
+       /* ODE index mapping: 0=SD, 1=IDE-EXI, 2=WKF, 3=Go Back */
+       switch (ret)
+       {
+         case -1:              // Button B
+         case 3:               // Go Back
+           quit = 1;
+           break;
+         case 0:               // Load from SD (= ODE card via gcode:/sd:)
+           use_SD = 1;
+           InfoScreen((char *) "Mounting media");
+           SD_SetHandler();
+           GEN_mount();
+           if (have_ROM == 1) return 1;
+           break;
+         case 1:               // Load from IDE-EXI
+           use_IDE = 1;
+           InfoScreen((char *) "Mounting media");
+           SD_SetHandler();
+           GEN_mount();
+           if (have_ROM == 1) return 1;
+           break;
+         case 2:               // Load from WKF
+           use_WKF = 1;
+           InfoScreen((char *) "Mounting media");
+           SD_SetHandler();
+           GEN_mount();
+           if (have_ROM == 1) return 1;
+           break;
+       }
+       continue;
+     }
+#endif
+
      switch (ret)
      {
         case -1:               // Button B - Exit
-        case 5:
+        case 5:                // Go Back
            quit = 1;
            break;
 
@@ -727,50 +799,49 @@ int loadmenu ()
            InfoScreen((char *) "Mounting media");
            SD_SetHandler();
            GEN_mount();
-           if (have_ROM == 1) return 1;// quit = 1;
+           if (have_ROM == 1) return 1;
            break;
 
         case 2:                // Load from IDE-EXI
 #else
-        case 2:                // Load from WKF
+        case 2:                // Load from WKF (real drive)
            use_WKF = 1;
            InfoScreen((char *) "Mounting media");
            SD_SetHandler();
            GEN_mount();
-           if (have_ROM == 1) return 1;// quit = 1;
+           if (have_ROM == 1) return 1;
            break;
 
-        case 1:                // Load from IDE-EXI
+        case 1:                // Load from IDE-EXI (real drive)
 #endif
            use_IDE = 1;
            InfoScreen((char *) "Mounting media");
            SD_SetHandler();
            GEN_mount();
-           if (have_ROM == 1) return 1;// quit = 1;
+           if (have_ROM == 1) return 1;
            break;
 
-        case 3:                // Load from DVD
+        case 3:                // Load from DVD (real drive)
            use_DVD = 1;
            InfoScreen((char *) "Mounting media");
            DVD_SetHandler();
-           GEN_mount();  
-           if (have_ROM == 1) return 1;// quit = 1;
+           GEN_mount();
+           if (have_ROM == 1) return 1;
            break;
 
-        case 4:                // Stop DVD
+        case 4:                // Stop DVD Motor (real drive)
            InfoScreen((char *) "Stopping DVD drive...");
            dvd_motor_off();
            break;
 
-        default:               // Load from FAT device
+        default:               // Load from SD (case 0)
            use_SD  = 1;
            InfoScreen((char *) "Mounting media");
            SD_SetHandler();
            GEN_mount();
            if (have_ROM == 1) return 1;
-        break;
-
-    }
+           break;
+     }
   }
 
   menu = prevmenu;

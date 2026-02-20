@@ -18,6 +18,8 @@
 #include "neocdrx.h"
 #include "fileio.h"
 #include <dirent.h>
+#include <sys/stat.h>
+#include <stdbool.h>
 
 /* Generic File I/O */
 #define MAXFILES	32
@@ -224,13 +226,28 @@ static int SDgetdir( char *thisdir )
       entry = readdir(dirs);
       while ( entry != NULL )
         {
-          /* Only get subdirectories */
-         if (entry->d_type == DT_DIR)
-		   if (strcmp(entry->d_name,".") &&
-             strcmp(entry->d_name,".."))
-		   {
-			 direntries[count++] = strdup(entry->d_name);
-		   }
+          /* Skip . and .. */
+          if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
+          {
+            entry = readdir(dirs);
+            continue;
+          }
+          {
+            bool is_dir = (entry->d_type == DT_DIR);
+            if (!is_dir && entry->d_type == DT_UNKNOWN)
+            {
+              /* libfat/exFAT often returns DT_UNKNOWN and stat() is unreliable
+               * on some libogc2 exFAT builds. Use opendir() instead — it works
+               * on any fatfs implementation: succeeds for dirs, fails for files. */
+              char fullpath[1280];
+              const char *sep = (thisdir[strlen(thisdir)-1] == '/') ? "" : "/";
+              snprintf(fullpath, sizeof(fullpath), "%s%s%s", thisdir, sep, entry->d_name);
+              DIR *probe = opendir(fullpath);
+              if (probe) { closedir(probe); is_dir = true; }
+            }
+            if (is_dir)
+              direntries[count++] = strdup(entry->d_name);
+          }
 
 		  if ( count == MAXDIRENTRIES ) break;
           entry = readdir(dirs);
@@ -264,8 +281,8 @@ static void SDmount()
 
   // Define DIR search location by Device type
   if (use_IDE) {
-     if ( IDEA_slot->startup() && fatMountSimple("IDEA", IDEA_slot) ) sprintf(root_dir,"IDEA:");
-     else if ( IDEB_slot->startup() && fatMountSimple("IDEB", IDEB_slot) ) sprintf(root_dir,"IDEB:");
+     if ( IDEA_slot->startup(IDEA_slot) && fatMountSimple("IDEA", (DISC_INTERFACE*)IDEA_slot) ) sprintf(root_dir,"IDEA:");
+     else if ( IDEB_slot->startup(IDEB_slot) && fatMountSimple("IDEB", (DISC_INTERFACE*)IDEB_slot) ) sprintf(root_dir,"IDEB:");
      else { ActionScreen ("IDE-EXI not initialized"); return; }
   }
 #ifdef HW_RVL
@@ -273,8 +290,34 @@ static void SDmount()
   else if (use_USB) sprintf(root_dir,"usb:");
 #else
   else if (use_WKF) {
-     if ( WKF_slot->startup() && fatMountSimple("WKF", WKF_slot) )  sprintf(root_dir,"WKF:");
+     if ( WKF_slot->startup(WKF_slot) && fatMountSimple("WKF", (DISC_INTERFACE*)WKF_slot) )  sprintf(root_dir,"WKF:");
      else { ActionScreen ("WKF not initialized"); return; }
+  }
+  else {
+     /* On GC, the GCLoader's SD card is exposed via __io_gcode (the GCLoader
+      * DVD-register interface). fatInitDefault() does not mount it, so we do
+      * it explicitly here. SD Gecko users are handled by fatInitDefault()
+      * which mounts __io_gcsda as "sd:".
+      * Try each known prefix to find whichever one is actually mounted. */
+     fatMountSimple("gcode", &__io_gcode);
+
+     const char *gc_prefixes[] = { "gcode:", "sd:", "fat:", NULL };
+     int pi;
+     root_dir[0] = '\0';
+     for (pi = 0; gc_prefixes[pi] != NULL; pi++) {
+       char testpath[32];
+       sprintf(testpath, "%s/", gc_prefixes[pi]);
+       DIR *test = opendir(testpath);
+       if (test) {
+         closedir(test);
+         sprintf(root_dir, "%s", gc_prefixes[pi]);
+         break;
+       }
+     }
+     if (root_dir[0] == '\0') {
+       ActionScreen((char *)"No storage device found!");
+       return;
+     }
   }
 #endif
 
@@ -285,7 +328,12 @@ static void SDmount()
   else closedir(dir);
 
   if ( !SDgetdir(basedir) )
+  {
+    char errmsg[128];
+    sprintf(errmsg, "No dirs in: %s", basedir);
+    ActionScreen(errmsg);
     return;
+  }
 
   DirSelector();
 

@@ -161,31 +161,47 @@ DirSelector (void)
      // Go to Next Directory
      if (joy & PAD_BUTTON_A)
      {
-        strcpy (scratchdir, basedir);
-
-        if (scratchdir[strlen (scratchdir) - 1] != '/')
-           strcat (scratchdir, "/");
-
-        m = (char *) p[currsel + 1];
-
-        strcat (scratchdir, m);
-
-        if (GEN_getdir (scratchdir))
+        if (maxfile == 0)
         {
-           maxfile = p[0];
-           currsel = menupos = 0;
-           strcpy (basedir, scratchdir);
+           // No subdirectories — try using basedir directly (game at root)
+           sprintf(megadir,"%s/IPL.TXT",basedir);
+           fp = GEN_fopen(megadir, "rb");
+           if (fp)
+           {
+              have_ROM = 1;
+              quit = 1;
+           }
         }
         else
-           GEN_getdir (basedir);
-
-        // if IPL.TXT found, automount directory
-        sprintf(megadir,"%s/IPL.TXT",basedir);
-        fp = GEN_fopen(megadir, "rb");
-        if (fp)
         {
-           have_ROM = 1;
-           quit = 1;
+           strcpy (scratchdir, basedir);
+
+           if (scratchdir[strlen (scratchdir) - 1] != '/')
+              strcat (scratchdir, "/");
+
+           m = (char *) p[currsel + 1];
+
+           if (m == NULL) { redraw = 1; break; }
+
+           strcat (scratchdir, m);
+
+           if (GEN_getdir (scratchdir))
+           {
+              maxfile = p[0];
+              currsel = menupos = 0;
+              strcpy (basedir, scratchdir);
+           }
+           else
+              GEN_getdir (basedir);
+
+           // if IPL.TXT found, automount directory
+           sprintf(megadir,"%s/IPL.TXT",basedir);
+           fp = GEN_fopen(megadir, "rb");
+           if (fp)
+           {
+              have_ROM = 1;
+              quit = 1;
+           }
         }
 
         redraw = 1;
@@ -233,15 +249,19 @@ DirSelector (void)
         if (basedir[strlen (basedir) - 1] != '/')
            strcat (basedir, "/");
 
-        m = (char *) p[currsel + 1];
-        strcat (basedir, m);
+        if (maxfile > 0)
+        {
+           m = (char *) p[currsel + 1];
+           strcat (basedir, m);
+        }
+        // if maxfile==0, use basedir as-is (game files at root)
         have_ROM = 1;
         quit = 1;
      }
   }
 
-  /*** Remove any still held buttons ***/
-  while (PAD_ButtonsHeld (0)) PAD_ScanPads();
+  /*** Remove any still held buttons — wait for retrace callback to drain ***/
+  while (PAD_ButtonsHeld (0)) VIDEO_WaitVSync();
 #ifdef HW_RVL
   while (WPAD_ButtonsHeld(0)) WPAD_ScanPads();
 #endif
