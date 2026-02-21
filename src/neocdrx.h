@@ -83,6 +83,12 @@ extern unsigned char *neogeo_spr_memory;
 extern unsigned char *neogeo_pcm_memory;
 extern unsigned char neogeo_memorycard[8192];
 extern unsigned short SaveDevice;
+void save_prefs(void);
+void load_prefs(void);
+GXRModeObj *vmode_for_setting(unsigned char setting);
+extern unsigned char DefaultLoadDevice; /* 0=None,1=SD,2=USB,3=IDE-EXI,4=WKF,5=DVD */
+extern unsigned char MenuTrigger;       /* 0=L,1=R,2=L+R,3=C-left,4=C-right */
+extern unsigned char VideoMode;         /* 0=Auto,1=480p,2=480i */
 extern int use_SD;
 extern int use_USB;
 extern int use_IDE;

@@ -221,37 +221,54 @@ int main(void)
 #endif
     
    __SYS_ReadROM(IPLInfo,256,0);                           // Read IPL tag
-    
+
    // Get the IPL TAG to set video mode then :
    // This is always set to 60hz Whether your running PAL or NTSC
    //   - Wii has no IPL tags for "PAL" so let libOGC figure out the video mode
    if(!is_gamecube()) {
      vmode = VIDEO_GetPreferredMode(NULL);                //Last mode used
+     /* Override with saved VideoMode pref if not Auto */
+     if (VideoMode == 1) vmode = &TVNtsc480Prog;
+     else if (VideoMode == 2) vmode = &TVNtsc480IntDf;
    }
    else {
       // Gamecube, determine based on IPL
       // If Trigger L detected during bootup, force 480i safemode
       // for Digital Component cable for SDTV compatibility.
-      if(VIDEO_HaveComponentCable() && !(PAD_ButtonsDown(0) & PAD_TRIGGER_L)) {
-        if((strstr(IPLInfo,"PAL")!=NULL)) {
-          vmode = &TVEurgb60Hz480Prog;                    //Progressive 60hz
+      if (VideoMode == 0) {
+        /* Auto: use hardware detection */
+        if(VIDEO_HaveComponentCable() && !(PAD_ButtonsDown(0) & PAD_TRIGGER_L)) {
+          if((strstr(IPLInfo,"PAL")!=NULL)) {
+            vmode = &TVEurgb60Hz480Prog;                    //Progressive 60hz
+          }
+          else {
+            vmode = &TVNtsc480Prog;                         //Progressive 480p
+          }
         }
         else {
-          vmode = &TVNtsc480Prog;                         //Progressive 480p
+           //try to use the IPL region
+           if(strstr(IPLInfo,"PAL")!=NULL) {
+             vmode = &TVEurgb60Hz480IntDf;                   //Interlaced 60hz
+           }
+           else if(strstr(IPLInfo,"NTSC")!=NULL) {
+             vmode = &TVNtsc480IntDf;                        //Interlaced 480i
+           }
+           else {
+             vmode = VIDEO_GetPreferredMode(NULL);           //Last mode used
+           }
         }
-     }
-     else {
-        //try to use the IPL region
-        if(strstr(IPLInfo,"PAL")!=NULL) {
-          vmode = &TVEurgb60Hz480IntDf;                   //Interlaced 60hz
-        }
-        else if(strstr(IPLInfo,"NTSC")!=NULL) {
-          vmode = &TVNtsc480IntDf;                        //Interlaced 480i
-        }
-        else {
-          vmode = VIDEO_GetPreferredMode(NULL);           //Last mode used
-        }
-     }  
+      }
+      else if (VideoMode == 1) {
+        /* Force 480p — only valid with component cable */
+        if (VIDEO_HaveComponentCable())
+          vmode = (strstr(IPLInfo,"PAL")!=NULL) ? &TVEurgb60Hz480Prog : &TVNtsc480Prog;
+        else
+          vmode = (strstr(IPLInfo,"PAL")!=NULL) ? &TVEurgb60Hz480IntDf : &TVNtsc480IntDf;
+      }
+      else {
+        /* Force 480i */
+        vmode = (strstr(IPLInfo,"PAL")!=NULL) ? &TVEurgb60Hz480IntDf : &TVNtsc480IntDf;
+      }
    }
 
     VIDEO_Configure(vmode);
@@ -291,7 +308,23 @@ int main(void)
      * be called — bypassing it with explicit fatMountSimple() prevents Swiss
      * from registering the GCLoader's SD card. */
     fatInitDefault();
-//  load_settings_default(); // eventually add settings ???
+
+    /* Now that the filesystem is mounted, load persisted prefs */
+    load_prefs();
+
+    /* If saved VideoMode differs from what auto-detection set up, apply it now */
+    if (VideoMode != 0) {
+      GXRModeObj *pref_vmode = vmode_for_setting(VideoMode);
+      if (pref_vmode != vmode) {
+        vmode = pref_vmode;
+        VIDEO_Configure(vmode);
+        VIDEO_ClearFrameBuffer(vmode, xfb[0], COLOR_BLACK);
+        VIDEO_ClearFrameBuffer(vmode, xfb[1], COLOR_BLACK);
+        VIDEO_Flush();
+        VIDEO_WaitVSync();
+        VIDEO_WaitVSync();
+      }
+    }
     
 	//  0.1.46 - All memory allocated in one chunk
 	neogeo_all_memory = memalign(32, MEM_BUCKET);
@@ -850,6 +883,18 @@ void neogeocd_exit(void)
   unmount_image();
   sound_shutdown();
 
+  /* Clear all interrupt callbacks before returning to loader.
+   * If Swiss reloads this DOL, any registered callback pointing into our
+   * code space will be overwritten — firing it causes an instant crash.
+   * Null them all out so no interrupt fires into dead code. */
+  AUDIO_StopDMA();
+  AUDIO_RegisterDMACallback(NULL);
+  VIDEO_SetPreRetraceCallback(NULL);
+  VIDEO_SetPostRetraceCallback(NULL);
+  VIDEO_SetBlack(1);
+  VIDEO_Flush();
+  VIDEO_WaitVSync();
+
 #ifdef HW_RVL
   DI_Close();
 
@@ -867,17 +912,12 @@ void neogeocd_exit(void)
   }
 
 #else
-  int *psoid = (int *) 0x80001800;
-  if (psoid[0] == 0x7c6000a6)
-  {
-    /* return to SDLOAD */
-    void (*PSOReload) () = (void (*)()) 0x80001800;
-    PSOReload();
-  }
-  else
-  {
-    /* hot reset */
-    SYS_ResetSystem(SYS_HOTRESET,0,0);
-  }
+  /* Always do a full hardware reset on GC. The PSO/Swiss stub at 0x80001800
+   * returns to Swiss without resetting, leaving libogc2 OS internals (mutex
+   * tables, thread handles, VI/DSP state) in a stale state. When Swiss
+   * re-launches this DOL, libogc2 skips re-init and the second run hangs.
+   * A hot reset goes through the IPL → Swiss boots clean from GCLoader. */
+  DCFlushRange((void*)0x80000000, 0x01800000);
+  SYS_ResetSystem(SYS_HOTRESET, 0, 0);
 #endif
 }

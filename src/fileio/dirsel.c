@@ -236,10 +236,13 @@ DirSelector (void)
         redraw = 1;
      }
 
-     // Quit browser, return to device menu
+     // Quit browser — return to main menu if a default device is set,
+     // otherwise return to device menu so user can pick a different source.
      if (joy & PAD_TRIGGER_Z) {
         have_ROM = 0;
         quit = 1;
+        if (DefaultLoadDevice != 0)
+          load_mainmenu();
      }
 
      // LOAD Selected Directory

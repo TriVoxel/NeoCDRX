@@ -40,15 +40,34 @@ static u32 keys = 0;
 static int padcal = 80;
 int accept_input = 0;
 
+/* MenuTrigger extern is in neocdrx.h */
+
+/* Returns non-zero if the current controller state should open the menu.
+ * C-stick threshold is 100 out of 127 max — requires a firm deliberate push. */
+#define CSTICK_THRESHOLD 90
+static int menu_triggered(int chan)
+{
+  u32 p = PAD_ButtonsHeld(chan);
+  switch (MenuTrigger) {
+    case 0: return (p & PAD_TRIGGER_L) != 0;
+    case 1: return (p & PAD_TRIGGER_R) != 0;
+    case 2: return (p & PAD_TRIGGER_L) && (p & PAD_TRIGGER_R);
+    case 3: return PAD_SubStickX(chan) < -CSTICK_THRESHOLD;
+    case 4: return PAD_SubStickX(chan) >  CSTICK_THRESHOLD;
+    default: return (p & PAD_TRIGGER_L) != 0;
+  }
+}
+
+
 static unsigned int neopadmap[] =
-  { P1UP,
+  {	P1UP,
 	P1DOWN,
 	P1LEFT,
 	P1RIGHT,
-	P1B,
 	P1A,
-	P1D,
-	P1C
+	P1B,
+	P1C,
+	P1D
 };
 
 unsigned short gcpadmap[] =
@@ -58,8 +77,8 @@ unsigned short gcpadmap[] =
     PAD_BUTTON_RIGHT,
     PAD_BUTTON_A,		// A
     PAD_BUTTON_B,		// B
-    PAD_BUTTON_X,		// D
-    PAD_BUTTON_Y		// C
+    PAD_BUTTON_X,		// C
+    PAD_BUTTON_Y		// D
 };
 
 #ifdef HW_RVL
@@ -418,7 +437,7 @@ update_input (void)
   p = PAD_ButtonsHeld (0);
   
 	//  GO BACK TO MENU
-  if (p & PAD_TRIGGER_L) neogeo_new_game ();
+  if (menu_triggered(0)) neogeo_new_game ();
 
 	//  MEMORY CARD SAVE
   if (p & PAD_TRIGGER_R){
@@ -468,7 +487,7 @@ update_input (void)
   p = PAD_ButtonsHeld (1);
 
 	//  GO BACK TO MENU
-	if (p & PAD_TRIGGER_L)
+	if (menu_triggered(1))
 		neogeo_new_game ();
 
 	//  MEMORY CARD SAVE

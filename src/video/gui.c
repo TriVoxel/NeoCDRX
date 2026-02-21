@@ -36,6 +36,52 @@ static unsigned char bannerunc[banner_WIDTH * banner_HEIGHT * 2] ATTRIBUTE_ALIGN
 static void unpack (void);
 
 unsigned short SaveDevice = 1;           // 0=MemCard, 1=SD/ODE
+unsigned char DefaultLoadDevice = 0;     // 0=None,1=SD,2=USB,3=IDE-EXI,4=WKF,5=DVD
+unsigned char MenuTrigger = 0;            // 0=L,1=R,2=L+R,3=C-left,4=C-right
+unsigned char VideoMode = 0;              // 0=Auto,1=480p,2=480i
+
+/* Prefs file path — tried bare (GC/ODE) then sd: prefix (Wii) */
+#define PREFS_PATH_A  "/NeoCDRX/NeoCDRXprefs.bin"
+#define PREFS_PATH_B  "sd:/NeoCDRX/NeoCDRXprefs.bin"
+
+typedef struct { unsigned char SaveDevice; unsigned char DefaultLoadDevice; unsigned char neogeo_region; unsigned char MenuTrigger; unsigned char VideoMode; unsigned char _pad[3]; } NeoPrefs;
+
+void save_prefs(void)
+{
+  NeoPrefs p;
+  p.SaveDevice = (unsigned char)SaveDevice;
+  p.DefaultLoadDevice = DefaultLoadDevice;
+  p.neogeo_region = (unsigned char)neogeo_region;
+  p.MenuTrigger = MenuTrigger;
+  p.VideoMode = VideoMode;
+
+  /* Try subdirectory paths first, then fall back to root of the filesystem.
+   * Do NOT call mkdir() — the devkitPPC newlib stub crashes on GC when the
+   * underlying fatfs driver doesn't support it via the syscall layer. */
+  FILE *fp = fopen(PREFS_PATH_A, "wb");
+  if (!fp) fp = fopen(PREFS_PATH_B, "wb");
+  if (!fp) fp = fopen("NeoCDRXprefs.bin", "wb");   /* root fallback */
+  if (!fp) return;
+  fwrite(&p, 1, sizeof(p), fp);
+  fclose(fp);
+}
+
+void load_prefs(void)
+{
+  NeoPrefs p;
+  FILE *fp = fopen(PREFS_PATH_A, "rb");
+  if (!fp) fp = fopen(PREFS_PATH_B, "rb");
+  if (!fp) return;
+  if (fread(&p, 1, sizeof(p), fp) == sizeof(p)) {
+    SaveDevice = p.SaveDevice < 2 ? p.SaveDevice : 1;
+    DefaultLoadDevice = p.DefaultLoadDevice < 6 ? p.DefaultLoadDevice : 0;
+    neogeo_region = p.neogeo_region < 3 ? p.neogeo_region : 0;
+    MenuTrigger = p.MenuTrigger < 5 ? p.MenuTrigger : 0;
+    VideoMode = p.VideoMode < 3 ? p.VideoMode : 0;
+  }
+  fclose(fp);
+}
+
 int use_SD  = 0;
 int use_USB = 0;
 int use_IDE = 0;
@@ -439,12 +485,13 @@ LoadingScreen (char *msg)
 char menutitle[60] = { "" };
 int menu = 0;
 
-static void draw_menu(char items[][22], int maxitems, int selected)//(  int currsel )
+static void draw_menu(char items[][22], int maxitems, int selected)
 {
    int i;
    int j;
-   if (mega == 1)  j = 162; 
-   else j = 225;
+   /* Center vertically within the backdrop menu box (263px tall, starting at y=157) */
+   if (mega == 1) j = 162;
+   else j = 158 + (263 - (maxitems * 32)) / 2;
    int n;
    char msg[] = "";
    n = strlen (msg);
@@ -471,8 +518,8 @@ static void draw_menu(char items[][22], int maxitems, int selected)//(  int curr
    
    if (mega == 0) {
       setfgcolour (COLOR_WHITE);
-      setbgcolour (BMPANE);//COLOR_BLACK);
-      gprint ((640 - (n * 16)) >> 1, 162/*432*/, msg, TXT_DOUBLE);
+      setbgcolour (BMPANE);
+      gprint ((640 - (n * 16)) >> 1, 162, msg, TXT_DOUBLE);
    }
 
    ShowScreen();
@@ -541,7 +588,7 @@ int ChooseMemCard (void)
   strncpy(titles[0], "RXsave.bin not found",    29);
   strncpy(titles[1], "choose a save location",   29);
   strncpy(titles[2], "",                         29);
-  strncpy(titles[3], "A - SD / ODE",             29);
+  strncpy(titles[3], "A - SD/ODE",             29);
   strncpy(titles[4], "B - Memory Card",          29);
 
   DrawScreen ();
@@ -626,15 +673,191 @@ int audiomenu()
 * Options menu
 ****************************************************************************/
 
+/* Label for MenuTrigger value */
+static const char *menu_trigger_label(unsigned char v)
+{
+  switch (v) {
+    case 0: return "L";
+    case 1: return "R";
+    case 2: return "L+R";
+    case 3: return "C-left";
+    case 4: return "C-right";
+    default: return "L";
+  }
+}
+
+/* -------------------------------------------------------------------------
+ * Video mode helpers
+ * ---------------------------------------------------------------------- */
+
+/* Replicates the auto-detection logic from main() startup */
+static GXRModeObj *get_auto_vmode(void)
+{
+#ifdef HW_RVL
+  return VIDEO_GetPreferredMode(NULL);
+#else
+  extern char IPLInfo[256];
+  if (VIDEO_HaveComponentCable()) {
+    if (strstr(IPLInfo, "PAL") != NULL) return &TVEurgb60Hz480Prog;
+    return &TVNtsc480Prog;
+  } else {
+    if (strstr(IPLInfo, "PAL") != NULL) return &TVEurgb60Hz480IntDf;
+    if (strstr(IPLInfo, "NTSC") != NULL) return &TVNtsc480IntDf;
+    return VIDEO_GetPreferredMode(NULL);
+  }
+#endif
+}
+
+/* Returns the GXRModeObj for a VideoMode value */
+GXRModeObj *vmode_for_setting(unsigned char setting)
+{
+  switch (setting) {
+    case 1: /* 480p */
+#ifdef HW_RVL
+      return &TVNtsc480Prog;
+#else
+      if (VIDEO_HaveComponentCable()) {
+        extern char IPLInfo[256];
+        if (strstr(IPLInfo, "PAL") != NULL) return &TVEurgb60Hz480Prog;
+        return &TVNtsc480Prog;
+      }
+      return get_auto_vmode(); /* no component cable, fall back */
+#endif
+    case 2: /* 480i */
+#ifdef HW_RVL
+      return &TVNtsc480IntDf;
+#else
+      {
+        extern char IPLInfo[256];
+        if (strstr(IPLInfo, "PAL") != NULL) return &TVEurgb60Hz480IntDf;
+        return &TVNtsc480IntDf;
+      }
+#endif
+    default: /* Auto */
+      return get_auto_vmode();
+  }
+}
+
+/* Apply a video mode — reconfigures VI and clears framebuffers */
+static void apply_vmode(GXRModeObj *mode)
+{
+  vmode = mode;
+  VIDEO_Configure(vmode);
+  VIDEO_ClearFrameBuffer(vmode, xfb[0], COLOR_BLACK);
+  VIDEO_ClearFrameBuffer(vmode, xfb[1], COLOR_BLACK);
+  VIDEO_SetNextFramebuffer(xfb[0]);
+  VIDEO_Flush();
+  VIDEO_WaitVSync();
+  VIDEO_WaitVSync();
+}
+
+static const char *vmode_label(unsigned char v)
+{
+  switch (v) {
+    case 0: return "Auto";
+    case 1: return "480p";
+    case 2: return "480i";
+    default: return "Auto";
+  }
+}
+
+/* Show a "Keep this video mode? Reverting in N seconds" confirm dialog.
+ * Returns 1 if user chose Keep, 0 if Revert (or timer expired). */
+static int confirm_vmode(void)
+{
+  const int TOTAL_SECONDS = 5;
+  const int FRAMES_PER_SEC = 60;
+
+  int selected = 0; /* 0=Revert (default), 1=Keep */
+  int frames = TOTAL_SECONDS * FRAMES_PER_SEC;
+  char countdown[40];
+  char keep_item[22];
+  char revert_item[22];
+
+  /* Drain any buttons still held from the options menu before starting */
+  while (PAD_ButtonsHeld(0)) VIDEO_WaitVSync();
+
+  /* Edge-detection state — initialised fresh each call (not static) */
+  u32 last_buttons = 0;
+
+  while (frames > 0)
+  {
+    int sec_remaining = (frames + FRAMES_PER_SEC - 1) / FRAMES_PER_SEC;
+
+    DrawScreen();
+    fgcolour = COLOR_WHITE;
+    bgcolour = BMPANE;
+
+    gprint((640 - (21 * 16)) >> 1, 220, (char *)"Keep this video mode?", TXT_DOUBLE);
+
+    snprintf(countdown, sizeof(countdown), "Reverting in %d second%s",
+             sec_remaining, sec_remaining == 1 ? "" : "s");
+    gprint((640 - (strlen(countdown) * 16)) >> 1, 258, countdown, TXT_DOUBLE);
+
+    /* Draw two buttons: Revert | Keep */
+    strncpy(revert_item, "  Revert  ", 21);
+    strncpy(keep_item,   "  Keep    ", 21);
+
+    if (selected == 0) {
+      setfgcolour(BMPANE);  setbgcolour(COLOR_WHITE);
+      gprint(160, 320, revert_item, TXT_DOUBLE);
+      setfgcolour(COLOR_WHITE); setbgcolour(BMPANE);
+      gprint(370, 320, keep_item, TXT_DOUBLE);
+    } else {
+      setfgcolour(COLOR_WHITE); setbgcolour(BMPANE);
+      gprint(160, 320, revert_item, TXT_DOUBLE);
+      setfgcolour(BMPANE);  setbgcolour(COLOR_WHITE);
+      gprint(370, 320, keep_item, TXT_DOUBLE);
+    }
+
+    setfgcolour(COLOR_WHITE);
+    setbgcolour(BMPANE);
+
+    ShowScreen();
+
+    u32 held = PAD_ButtonsHeld(0);
+    u32 pressed = held & ~last_buttons;
+    last_buttons = held;
+
+    if (pressed & PAD_BUTTON_LEFT)  selected = 0;
+    if (pressed & PAD_BUTTON_RIGHT) selected = 1;
+
+    if (pressed & PAD_BUTTON_A)
+      return selected; /* 1=Keep, 0=Revert */
+    if (pressed & PAD_BUTTON_B)
+      return 0; /* Revert */
+
+    frames--;
+  }
+
+  return 0; /* Timer expired — revert */
+}
+
+/* Label for DefaultLoadDevice value */
+static const char *load_device_label(unsigned char v)
+{
+  switch (v) {
+    case 0: return "None";
+    case 1: return "SD/ODE";
+    case 2: return "USB";
+    case 3: return "IDE-EXI";
+    case 4: return "WKF";
+    case 5: return "DVD";
+    default: return "None";
+  }
+}
+
 int optionmenu()
 {
   int prevmenu = menu;
   int quit = 0;
   int ret;
-  /* 2 save options: SD/ODE and Memory Card */
   int num_save_devices = 2;
-  int count = 4;
-  char items[4][22];
+  int count = 7;
+  char items[7][22];
+
+  /* Track VideoMode on entry so we can detect changes on exit */
+  unsigned char entry_video_mode = VideoMode;
 
   menu = 0;
 
@@ -645,10 +868,14 @@ int optionmenu()
     else                         sprintf(items[0], "Region:        EUROPE");
 
     if (SaveDevice == 0) sprintf(items[1], "Save Device: MEM Card");
-    else                 sprintf(items[1], "Save Device:  SD/ODE");
+    else                 sprintf(items[1], "Save Device:   SD/ODE");
 
-    strncpy(items[2], "FX / Music Equalizer", 21);
-    strncpy(items[3], "Go Back",              21);
+    snprintf(items[2], 22, "Load Device: %8s", load_device_label(DefaultLoadDevice));
+    snprintf(items[3], 22, "Menu Trigger:%8s", menu_trigger_label(MenuTrigger));
+    snprintf(items[4], 22, "Video Mode:  %8s", vmode_label(VideoMode));
+
+    strncpy(items[5], "FX / Music Equalizer", 21);
+    strncpy(items[6], "Go Back",              21);
 
     ret = DoMenu (&items[0], count);
     switch (ret)
@@ -656,23 +883,72 @@ int optionmenu()
       case 0:   // BIOS Region
         neogeo_region++;
         if (neogeo_region > 2) neogeo_region = 0;
+        save_prefs();
         break;
 
-      case 1:   // Save Device — cycle through available options
+      case 1:   // Save Device
         SaveDevice++;
         if (SaveDevice >= num_save_devices) SaveDevice = 0;
+        save_prefs();
         break;
 
-      case 2:
+      case 2:   // Default Load Device
+      {
+#ifdef HW_RVL
+        DefaultLoadDevice++;
+        if (DefaultLoadDevice > 3) DefaultLoadDevice = 0;
+#else
+        if      (DefaultLoadDevice == 0) DefaultLoadDevice = 1;
+        else if (DefaultLoadDevice == 1) DefaultLoadDevice = 3;
+        else if (DefaultLoadDevice == 3) DefaultLoadDevice = 4;
+        else if (DefaultLoadDevice == 4) DefaultLoadDevice = 5;
+        else                             DefaultLoadDevice = 0;
+#endif
+        save_prefs();
+        break;
+      }
+
+      case 3:   // Menu Trigger
+        MenuTrigger++;
+        if (MenuTrigger > 4) MenuTrigger = 0;
+        save_prefs();
+        break;
+
+      case 4:   // Video Mode — cycle only, apply on exit
+        VideoMode++;
+        if (VideoMode > 2) VideoMode = 0;
+        break;
+
+      case 5:
         audiomenu();
         break;
 
-      case -1:  // Go Back
-      case 3:
+      case -1:
+      case 6:
         quit = 1;
         break;
     }
   }
+
+  /* If VideoMode changed, apply and show confirm dialog */
+  if (VideoMode != entry_video_mode)
+  {
+    GXRModeObj *old_vmode = vmode;
+    unsigned char old_setting = entry_video_mode;
+
+    apply_vmode(vmode_for_setting(VideoMode));
+
+    if (confirm_vmode())
+    {
+      save_prefs();
+    }
+    else
+    {
+      VideoMode = old_setting;
+      apply_vmode(old_vmode);
+    }
+  }
+
   menu = prevmenu;
   return 0;
 }
@@ -689,6 +965,28 @@ int loadmenu ()
   int ret,count;
   int quit = 0;
 
+  /* If a default load device is set, skip the picker and go straight to it */
+  if (DefaultLoadDevice != 0)
+  {
+    use_SD = use_USB = use_IDE = use_WKF = use_DVD = 0;
+    switch (DefaultLoadDevice)
+    {
+      case 1: use_SD  = 1; break;
+      case 2: use_USB = 1; break;
+      case 3: use_IDE = 1; break;
+      case 4: use_WKF = 1; break;
+      case 5: use_DVD = 1; break;
+    }
+    InfoScreen((char *) "Mounting media");
+    if (DefaultLoadDevice == 5)
+      DVD_SetHandler();
+    else
+      SD_SetHandler();
+    GEN_mount();
+    if (have_ROM == 1) return 1;
+    /* Mount failed — fall through to the normal picker */
+  }
+
 #ifdef HW_RVL
   count = 6;
   char item[6][22] = {
@@ -700,29 +998,9 @@ int loadmenu ()
     {"Go Back"}
   };
 #else
-  /* Probe drive identity so we can label the button correctly.
-   * DVD_Init must be called before is_ode() reads the version register. */
   DVD_Init();
   int ode_detected = is_ode();
 
-  /*
-   * ODE menu (5 items) — ODE at top, no Stop Motor:
-   *   0: Load from ODE
-   *   1: Load from SD
-   *   2: Load from IDE-EXI
-   *   3: Load from WKF
-   *   4: Go Back
-   *
-   * Real drive menu (6 items) — DVD in original position:
-   *   0: Load from SD
-   *   1: Load from IDE-EXI
-   *   2: Load from WKF
-   *   3: Load from DVD
-   *   4: Stop DVD Motor
-   *   5: Go Back
-   */
-  /* When ODE detected, omit DVD options (no physical drive).
-   * "Load from SD" already browses the ODE card, so no separate ODE entry. */
   count = ode_detected ? 4 : 6;
   char item[6][22];
   if (ode_detected) {
@@ -753,28 +1031,27 @@ int loadmenu ()
 
 #ifndef HW_RVL
      if (ode_detected) {
-       /* ODE index mapping: 0=SD, 1=IDE-EXI, 2=WKF, 3=Go Back */
        switch (ret)
        {
-         case -1:              // Button B
-         case 3:               // Go Back
+         case -1:
+         case 3:
            quit = 1;
            break;
-         case 0:               // Load from SD (= ODE card via gcode:/sd:)
+         case 0:
            use_SD = 1;
            InfoScreen((char *) "Mounting media");
            SD_SetHandler();
            GEN_mount();
            if (have_ROM == 1) return 1;
            break;
-         case 1:               // Load from IDE-EXI
+         case 1:
            use_IDE = 1;
            InfoScreen((char *) "Mounting media");
            SD_SetHandler();
            GEN_mount();
            if (have_ROM == 1) return 1;
            break;
-         case 2:               // Load from WKF
+         case 2:
            use_WKF = 1;
            InfoScreen((char *) "Mounting media");
            SD_SetHandler();
@@ -788,13 +1065,13 @@ int loadmenu ()
 
      switch (ret)
      {
-        case -1:               // Button B - Exit
-        case 5:                // Go Back
+        case -1:
+        case 5:
            quit = 1;
            break;
 
 #ifdef HW_RVL
-        case 1:                // Load from USB
+        case 1:
            use_USB = 1;
            InfoScreen((char *) "Mounting media");
            SD_SetHandler();
@@ -802,9 +1079,9 @@ int loadmenu ()
            if (have_ROM == 1) return 1;
            break;
 
-        case 2:                // Load from IDE-EXI
+        case 2:
 #else
-        case 2:                // Load from WKF (real drive)
+        case 2:
            use_WKF = 1;
            InfoScreen((char *) "Mounting media");
            SD_SetHandler();
@@ -812,7 +1089,7 @@ int loadmenu ()
            if (have_ROM == 1) return 1;
            break;
 
-        case 1:                // Load from IDE-EXI (real drive)
+        case 1:
 #endif
            use_IDE = 1;
            InfoScreen((char *) "Mounting media");
@@ -821,7 +1098,7 @@ int loadmenu ()
            if (have_ROM == 1) return 1;
            break;
 
-        case 3:                // Load from DVD (real drive)
+        case 3:
            use_DVD = 1;
            InfoScreen((char *) "Mounting media");
            DVD_SetHandler();
@@ -829,12 +1106,12 @@ int loadmenu ()
            if (have_ROM == 1) return 1;
            break;
 
-        case 4:                // Stop DVD Motor (real drive)
+        case 4:
            InfoScreen((char *) "Stopping DVD drive...");
            dvd_motor_off();
            break;
 
-        default:               // Load from SD (case 0)
+        default:
            use_SD  = 1;
            InfoScreen((char *) "Mounting media");
            SD_SetHandler();
@@ -858,74 +1135,105 @@ int load_mainmenu()
   s8 ret;
   u8 quit = 0;
   menu = 0;
-#ifdef HW_RVL
-  u8 count = 6;
-  char items[6][22] =
-#else
-  u8 count = 6;
-  char items[6][22] =
-#endif
-  {
-    {"Play Game"},
-    {"Reset Game"},
-    {"Load New Game"},
-    {"Settings"},
-    {"Exit"},
-	{"Credits"}
-  };
 
+  /* Build menu dynamically — Play/Reset only shown when a game is loaded */
+  char items[6][22];
+  u8 count;
 
-  // Switch to menu default rendering mode (auto detect)
   VIDEO_Configure (vmode);
   VIDEO_ClearFrameBuffer(vmode, xfb[whichfb], COLOR_BLACK);
   VIDEO_Flush();
   VIDEO_WaitVSync();
   VIDEO_WaitVSync();
 
+  while (quit == 0)
+  {
+    if (have_ROM)
+    {
+      strncpy(items[0], "Resume Game",   21);
+      strncpy(items[1], "Reset Game",    21);
+      strncpy(items[2], "Change Game",   21);
+      strncpy(items[3], "Settings",      21);
+      strncpy(items[4], "Exit",          21);
+      strncpy(items[5], "Credits",       21);
+      count = 6;
+    }
+    else
+    {
+      strncpy(items[0], "Load Game",  21);
+      strncpy(items[1], "Settings",   21);
+      strncpy(items[2], "Exit",       21);
+      strncpy(items[3], "Credits",    21);
+      count = 4;
+    }
 
+    ret = DoMenu (&items[0], count);
 
-	while (quit == 0)
-	{
-		ret = DoMenu (&items[0], count);
+    if (have_ROM)
+    {
+      switch (ret)
+      {
+        case -1:
+        case  0:
+          ret = 0;
+          quit = 1;
+          break;
 
-	switch (ret)
-	{
-	  case -1:
-      case  0: /*** Return to game ***/
-        ret = 0;
-        quit = 1;
-        break;
+        case 1:
+          neogeo_reset();
+          YM2610_sh_reset();
+          ret = 0;
+          quit = 1;
+          break;
 
-      case 1:  /*** Reset game ***/
-        neogeo_reset();
-        YM2610_sh_reset();
-        ret = 0;
-        quit = 1;
-        break;
+        case 2:
+          quit = loadmenu();
+          break;
 
-      case 2:  /*** Load device menu ***/
-        quit = loadmenu();
-        break;
+        case 3:
+          optionmenu();
+          break;
 
-      case 3:  /*** Settings ***/
-        optionmenu();
-        break;
+        case 4:
+          VIDEO_ClearFrameBuffer(vmode, xfb[whichfb], COLOR_BLACK);
+          VIDEO_Flush();
+          VIDEO_WaitVSync();
+          neogeocd_exit();
+          break;
 
-      case 4:  /*** Exit ***/
-        VIDEO_ClearFrameBuffer(vmode, xfb[whichfb], COLOR_BLACK);
-        VIDEO_Flush();
-        VIDEO_WaitVSync();
-        neogeocd_exit();
-        break;
+        case 5:
+          credits();
+          break;
+      }
+    }
+    else
+    {
+      switch (ret)
+      {
+        case -1:
+        case  0:
+          quit = loadmenu();
+          break;
 
-      case 5:  /*** Credits ***/
-		credits();
-        break;
-	}
+        case 1:
+          optionmenu();
+          break;
+
+        case 2:
+          VIDEO_ClearFrameBuffer(vmode, xfb[whichfb], COLOR_BLACK);
+          VIDEO_Flush();
+          VIDEO_WaitVSync();
+          neogeocd_exit();
+          break;
+
+        case 3:
+          credits();
+          break;
+      }
+    }
   }
 
-  // Remove any still held buttons 
-  while(PAD_ButtonsHeld(0)) PAD_ScanPads();
+  while(PAD_ButtonsHeld(0)) VIDEO_WaitVSync();
 #ifdef HW_RVL
   while(WPAD_ButtonsHeld(0)) WPAD_ScanPads();
 #endif
