@@ -21,6 +21,7 @@ char basedir[1024];
 char scratchdir[1024];
 char megadir[1024];
 char dirbuffer[0x10000] ATTRIBUTE_ALIGN (32);
+static int bg_transparent = 0;
 
 char root_dir[10];
 //int have_ROM;
@@ -58,7 +59,9 @@ DrawDirSelector (int maxfile, int menupos, int currsel)
         {
           setfgcolour (COLOR_BLACK);
           setbgcolour (BMPANE);
+          bg_transparent = 1;
           gprint (64, j, display, TXT_DOUBLE);
+          bg_transparent = 0;
         }
 
       j += 32;
