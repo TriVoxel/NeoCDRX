@@ -88,6 +88,7 @@ draw_init (void)
 
   GX_InitTexObj (&texobj, texturemem, vwidth, vheight, GX_TF_RGB565,
 		 GX_CLAMP, GX_CLAMP, GX_FALSE);
+  GX_InitTexObjFilterMode (&texobj, GX_NEAR, GX_NEAR);
 }
 
 static void
@@ -101,8 +102,13 @@ draw_vert (u8 pos, u8 c, f32 s, f32 t)
 static void
 draw_square (Mtx v)
 {
-  Mtx m;			// model matrix.
-  Mtx mv;			// modelview matrix.
+  Mtx m;		// model matrix.
+  Mtx mv;		// modelview matrix.
+
+  /* When cropping overscan: start UV at 8/320 to skip the 8 left pixels.
+   * The quad stays centered (no x_shift needed — the 4px offset from the
+   * asymmetric UV is negligible at this scale). */
+  float uv_left  = CropOverscan ? (8.0f / 320.0f) : 0.0f;
 
   guMtxIdentity (m);
   guMtxTransApply (m, m, 0, 0, -100);
@@ -110,10 +116,10 @@ draw_square (Mtx v)
 
   GX_LoadPosMtxImm (mv, GX_PNMTX0);
   GX_Begin (GX_QUADS, GX_VTXFMT0, 4);
-  draw_vert (0, 0, 0.0, 0.0);
-  draw_vert (1, 0, 1.0, 0.0);
-  draw_vert (2, 0, 1.0, 1.0);
-  draw_vert (3, 0, 0.0, 1.0);
+  draw_vert (0, 0, uv_left, 0.0);
+  draw_vert (1, 0, 1.0,     0.0);
+  draw_vert (2, 0, 1.0,     1.0);
+  draw_vert (3, 0, uv_left, 1.0);
   GX_End ();
 }
 

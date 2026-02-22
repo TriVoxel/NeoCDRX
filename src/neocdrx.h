@@ -89,6 +89,9 @@ GXRModeObj *vmode_for_setting(unsigned char setting);
 extern unsigned char DefaultLoadDevice; /* 0=None,1=SD,2=USB,3=IDE-EXI,4=WKF,5=DVD */
 extern unsigned char MenuTrigger;       /* 0=L,1=R,2=L+R,3=C-left,4=C-right */
 extern unsigned char VideoMode;         /* 0=Auto,1=480p,2=480i */
+extern unsigned char SkipBios;          /* 0=False, 1=True */
+extern unsigned char CropOverscan;      /* 0=False, 1=True */
+extern int dirsel_back_to_main;         /* set by DirSelector to signal return-to-main */
 extern int use_SD;
 extern int use_USB;
 extern int use_IDE;

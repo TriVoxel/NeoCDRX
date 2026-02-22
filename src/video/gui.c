@@ -31,7 +31,56 @@ extern u8 console_font_8x16[];
 
 static u32 fgcolour = COLOR_WHITE;
 static u32 bgcolour = COLOR_BLACK;
-static int bg_transparent = 0;  /* when 1, background pixels in drawcharw are skipped (backdrop shows through) */
+int bg_transparent = 0;  /* when 1, background pixels in drawcharw are skipped (backdrop shows through) */
+int bg_rainbow = 0;      /* when 1, background pixels use the scrolling rainbow gradient */
+
+/* Rainbow gradient state — precomputed YCbCr lookup, one entry per pixel column (0-639) */
+static u8  rain_y[640];
+static u8  rain_cb[640];
+static u8  rain_cr[640];
+static int rainbow_phase = 0;   /* current horizontal scroll offset, 0-639 */
+
+/* Precompute the ROYGBIVIBGYOR gradient into the rain_* tables.
+ * The spectrum spans 0-639px: R at edges, V at center (x=319/320).
+ * Each half has 6 segments across 7 colour stops. */
+static void init_rainbow(void)
+{
+  /* 7 stops: R O Y G B I V */
+  static const int stops[7][3] = {
+    {180,  10,  10},   /* R */
+    {240, 140,   0},   /* O */
+    {180, 180,   0},   /* Y */
+    { 10, 180,  10},   /* G */
+    { 10,  10, 180},   /* B */
+    { 75,   0, 130},   /* I */
+    {110,   0, 175},   /* V */
+  };
+
+  int i;
+  for (i = 0; i < 640; i++) {
+    /* Map pixel to a position in [0, 6] along the half-spectrum.
+     * First half (0-319): R→V.  Second half (320-639): V→R (mirror). */
+    float pos;
+    if (i < 320)
+      pos = i * 6.0f / 320.0f;
+    else
+      pos = (639 - i) * 6.0f / 320.0f;
+
+    int s0 = (int)pos;
+    int s1 = s0 + 1;
+    if (s1 > 6) s1 = 6;
+    float t = pos - s0;
+
+    float r = stops[s0][0] + t * (stops[s1][0] - stops[s0][0]);
+    float g = stops[s0][1] + t * (stops[s1][1] - stops[s0][1]);
+    float b = stops[s0][2] + t * (stops[s1][2] - stops[s0][2]);
+
+    /* BT.601 limited-range RGB → YCbCr */
+    rain_y[i]  = (u8)( 0.257f*r + 0.504f*g + 0.098f*b + 16.5f);
+    rain_cb[i] = (u8)(-0.148f*r - 0.291f*g + 0.439f*b + 128.5f);
+    rain_cr[i] = (u8)( 0.439f*r - 0.368f*g - 0.071f*b + 128.5f);
+  }
+}
 static unsigned char background[1280 * 480] ATTRIBUTE_ALIGN (32);
 static unsigned char bannerunc[banner_WIDTH * banner_HEIGHT * 2] ATTRIBUTE_ALIGN (32);
 static void unpack (void);
@@ -40,12 +89,14 @@ unsigned short SaveDevice = 1;            // 0=MemCard, 1=SD/ODE
 unsigned char DefaultLoadDevice = 0;      // 0=None,1=SD,2=USB,3=IDE-EXI,4=WKF,5=DVD
 unsigned char MenuTrigger = 4;            // 0=L,1=R,2=L+R,3=C-left,4=C-right
 unsigned char VideoMode = 0;              // 0=Auto,1=480p,2=480i
+unsigned char SkipBios = 0;              // 0=False, 1=True
+unsigned char CropOverscan = 1;          // 0=False, 1=True (default crops left 8px)
 
 /* Prefs file path — tried bare (GC/ODE) then sd: prefix (Wii) */
 #define PREFS_PATH_A  "/NeoCDRX/NeoCDRXprefs.bin"
 #define PREFS_PATH_B  "sd:/NeoCDRX/NeoCDRXprefs.bin"
 
-typedef struct { unsigned char SaveDevice; unsigned char DefaultLoadDevice; unsigned char neogeo_region; unsigned char MenuTrigger; unsigned char VideoMode; unsigned char _pad[3]; } NeoPrefs;
+typedef struct { unsigned char SaveDevice; unsigned char DefaultLoadDevice; unsigned char neogeo_region; unsigned char MenuTrigger; unsigned char VideoMode; unsigned char SkipBios; unsigned char CropOverscan; unsigned char _pad[1]; } NeoPrefs;
 
 void save_prefs(void)
 {
@@ -55,6 +106,8 @@ void save_prefs(void)
   p.neogeo_region = (unsigned char)neogeo_region;
   p.MenuTrigger = MenuTrigger;
   p.VideoMode = VideoMode;
+  p.SkipBios = SkipBios;
+  p.CropOverscan = CropOverscan;
 
   /* Try subdirectory paths first, then fall back to root of the filesystem.
    * Do NOT call mkdir() — the devkitPPC newlib stub crashes on GC when the
@@ -79,6 +132,8 @@ void load_prefs(void)
     neogeo_region = p.neogeo_region < 3 ? p.neogeo_region : 0;
     MenuTrigger = p.MenuTrigger < 5 ? p.MenuTrigger : 0;
     VideoMode = p.VideoMode < 3 ? p.VideoMode : 0;
+    SkipBios = p.SkipBios < 2 ? p.SkipBios : 0;
+    CropOverscan = p.CropOverscan < 2 ? p.CropOverscan : 1;
   }
   fclose(fp);
 }
@@ -175,9 +230,40 @@ circle (int cx, int cy, int radius)
     }
 }
 
-/****************************************************************************
-* drawchar
-****************************************************************************/
+/* Draw a rainbow-gradient bar with padding and straight-cut beveled corners.
+ * x, y: top-left in screen pixels (x should be even).
+ * w: total width including padding, h: height in pixels.
+ * bevel: corner chamfer size in pixels.
+ * The gradient is a cross-section of the 640px-wide scrolling rainbow. */
+void draw_rainbow_bar(int x, int y, int w, int h, int bevel)
+{
+  int row, col;
+  for (row = 0; row < h; row++) {
+    /* Straight bevel: cut pixels from each corner proportional to distance
+     * from the nearest horizontal edge. */
+    int cut = 0;
+    if (row < bevel)        cut = bevel - row;
+    else if (row >= h - bevel) cut = bevel - (h - 1 - row);
+
+    int x0 = x + cut;
+    int x1 = x + w - cut;
+    /* Align left edge to even pixel (YUY2 word boundary) */
+    x0 = (x0 + 1) & ~1;
+
+    int fb_y = y + row;
+    for (col = x0; col < x1; col += 2) {
+      int px0 = (col     + rainbow_phase) % 640;
+      int px1 = (col + 1 + rainbow_phase) % 640;
+      u8 Y0 = rain_y[px0], Y1 = rain_y[px1];
+      u8 Cb = (u8)(((int)rain_cb[px0] + (int)rain_cb[px1]) >> 1);
+      u8 Cr = (u8)(((int)rain_cr[px0] + (int)rain_cr[px1]) >> 1);
+      u32 word = ((u32)Y0 << 24) | ((u32)Cb << 16) | ((u32)Y1 << 8) | (u32)Cr;
+      xfb[whichfb][(fb_y * 320) + (col >> 1)] = word;
+    }
+  }
+}
+
+
 static void
 drawchar (int x, int y, char c)
 {
@@ -235,7 +321,17 @@ drawcharw (int x, int y, char c)
 	  if (bits & 0x80)
 		xfb[whichfb][offset + xx] = xfb[whichfb][offset + 320 + xx] =
 		  fgcolour;
-	  else if (!bg_transparent)
+	  else if (bg_rainbow) {
+		/* Two pixels per word: px0 at x+xx*2, px1 at x+xx*2+1.
+		 * Chroma is averaged (YUY2 4:2:2). Scroll via rainbow_phase. */
+		int px0 = (x + xx * 2 + rainbow_phase) % 640;
+		int px1 = (x + xx * 2 + 1 + rainbow_phase) % 640;
+		u8 Y0 = rain_y[px0], Y1 = rain_y[px1];
+		u8 Cb = (u8)(((int)rain_cb[px0] + rain_cb[px1]) >> 1);
+		u8 Cr = (u8)(((int)rain_cr[px0] + rain_cr[px1]) >> 1);
+		u32 w = ((u32)Y0 << 24) | ((u32)Cb << 16) | ((u32)Y1 << 8) | Cr;
+		xfb[whichfb][offset + xx] = xfb[whichfb][offset + 320 + xx] = w;
+	  } else if (!bg_transparent)
 		xfb[whichfb][offset + xx] = xfb[whichfb][offset + 320 + xx] =
 		  bgcolour;
 
@@ -278,12 +374,20 @@ void
 DrawScreen (void)
 {
   static int inited = 0;
+  static int rainbow_tick = 0;
 
   if (!inited)
     {
       unpack ();
+      init_rainbow ();
       inited = 1;
     }
+
+  /* Advance rainbow scroll one pixel every 2 frames (~30px/sec at 60fps) */
+  if (++rainbow_tick >= 1) {
+    rainbow_tick = 0;
+    rainbow_phase = (rainbow_phase + 3) % 640;
+  }
 
   VIDEO_WaitVSync ();
 
@@ -504,10 +608,14 @@ static void draw_menu(char items[][22], int maxitems, int selected)
    {
       if ( i == selected )
       {
+         int text_x = ( 640 - ( strlen(items[i]) << 4 )) >> 1;
+         int bar_x  = text_x - 4;
+         int bar_w  = (strlen(items[i]) << 4) + 8;
+         draw_rainbow_bar(bar_x, j, bar_w, 32, 4);
          setfgcolour (COLOR_WHITE);
-         setbgcolour (INVTEXT);
+         bg_transparent = 1;
+         gprint( text_x, j, items[i], TXT_DOUBLE);
          bg_transparent = 0;
-         gprint( ( 640 - ( strlen(items[i]) << 4 )) >> 1, j, items[i], TXT_DOUBLE);
       }
       else
       {
@@ -533,32 +641,25 @@ static void draw_menu(char items[][22], int maxitems, int selected)
 ****************************************************************************/
 int DoMenu (char items[][22], int maxitems)
 {
-  int redraw = 1;
   int quit = 0;
   int ret = 0;
   short joy;
 
   while (quit == 0)
   {
-    if (redraw)
-    {
-      draw_menu (&items[0], maxitems, menu);
-      redraw = 0;
-    }
+    draw_menu (&items[0], maxitems, menu);
 
 
     joy = getMenuButtons();
 
     if (joy & PAD_BUTTON_UP)
     {
-      redraw = 1;
       menu--;
       if (menu < 0) menu = maxitems - 1;
     }
 
     if (joy & PAD_BUTTON_DOWN)
     {
-      redraw = 1;
       menu++;
       if (menu == maxitems) menu = 0;
     }
@@ -802,9 +903,11 @@ static int confirm_vmode(void)
     strncpy(keep_item,   "  Keep  ", 21);
 
     if (selected == 0) {
-      setfgcolour(COLOR_WHITE);  setbgcolour(INVTEXT);
-      bg_transparent = 0;
+      draw_rainbow_bar(178 - 4, 320, 128 + 8, 32, 6);
+      setfgcolour(COLOR_WHITE);
+      bg_transparent = 1;
       gprint(178, 320, revert_item, TXT_DOUBLE);
+      bg_transparent = 0;
       setfgcolour(COLOR_BLACK);
       bg_transparent = 1;
       gprint(338, 320, keep_item, TXT_DOUBLE);
@@ -814,8 +917,11 @@ static int confirm_vmode(void)
       bg_transparent = 1;
       gprint(178, 320, revert_item, TXT_DOUBLE);
       bg_transparent = 0;
-      setfgcolour(COLOR_WHITE);  setbgcolour(INVTEXT);
+      draw_rainbow_bar(338 - 4, 320, 128 + 8, 32, 6);
+      setfgcolour(COLOR_WHITE);
+      bg_transparent = 1;
       gprint(338, 320, keep_item, TXT_DOUBLE);
+      bg_transparent = 0;
     }
 
     setfgcolour(COLOR_WHITE);
@@ -861,8 +967,8 @@ int optionmenu()
   int quit = 0;
   int ret;
   int num_save_devices = 2;
-  int count = 7;
-  char items[7][22];
+  int count = 8;
+  char items[8][22];
 
   /* Track VideoMode on entry so we can detect changes on exit */
   unsigned char entry_video_mode = VideoMode;
@@ -879,11 +985,11 @@ int optionmenu()
     else                 sprintf(items[1], "Save Device:   SD/ODE");
 
     snprintf(items[2], 22, "Load Device: %8s", load_device_label(DefaultLoadDevice));
-    snprintf(items[3], 22, "Menu Trigger:%8s", menu_trigger_label(MenuTrigger));
+    snprintf(items[3], 22, "Menu Toggle: %8s", menu_trigger_label(MenuTrigger));
     snprintf(items[4], 22, "Video Mode:  %8s", vmode_label(VideoMode));
-
-    strncpy(items[5], "FX / Music Equalizer", 21);
-    strncpy(items[6], "Go Back",              21);
+    snprintf(items[5], 22, "Skip BIOS:   %8s", SkipBios ? "True" : "False");
+    snprintf(items[6], 22, "Crop Overscan:%7s", CropOverscan ? "True" : "False");
+    snprintf(items[7], 22, "FX / Music Equalizer");
 
     ret = DoMenu (&items[0], count);
     switch (ret)
@@ -927,12 +1033,21 @@ int optionmenu()
         if (VideoMode > 2) VideoMode = 0;
         break;
 
-      case 5:
+      case 5:   // Skip BIOS
+        SkipBios = !SkipBios;
+        save_prefs();
+        break;
+
+      case 6:   // Crop Overscan
+        CropOverscan = !CropOverscan;
+        save_prefs();
+        break;
+
+      case 7:   // FX / Music Equalizer
         audiomenu();
         break;
 
       case -1:
-      case 6:
         quit = 1;
         break;
     }
@@ -992,6 +1107,7 @@ int loadmenu ()
       SD_SetHandler();
     GEN_mount();
     if (have_ROM == 1) return 1;
+    if (dirsel_back_to_main) { dirsel_back_to_main = 0; return 0; }
     /* Mount failed — fall through to the normal picker */
   }
 
@@ -1067,6 +1183,7 @@ int loadmenu ()
            if (have_ROM == 1) return 1;
            break;
        }
+       if (dirsel_back_to_main) { dirsel_back_to_main = 0; quit = 1; }
        continue;
      }
 #endif
@@ -1127,6 +1244,7 @@ int loadmenu ()
            if (have_ROM == 1) return 1;
            break;
      }
+     if (dirsel_back_to_main) { dirsel_back_to_main = 0; quit = 1; }
   }
 
   menu = prevmenu;
@@ -1195,8 +1313,15 @@ int load_mainmenu()
           break;
 
         case 2:
-          quit = loadmenu();
+        {
+          int saved_have_ROM = have_ROM;
+          int changed = loadmenu();
+          if (changed)
+            quit = 1;      /* new game selected — exit main menu and let emulator restart */
+          else
+            have_ROM = saved_have_ROM; /* backed out — restore so Resume/Reset remain available */
           break;
+        }
 
         case 3:
           optionmenu();

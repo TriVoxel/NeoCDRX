@@ -461,6 +461,16 @@ static void neogeo_run(void)
 	/*** (re)start emulation ***/
 	for (;;) {
 	neogeo_run_bios();
+	if (SkipBios) {
+		/* Fast-forward through the BIOS animation at full CPU speed.
+		 * All traps (neogeo_ipl, cdrom_load_files, neogeo_ipl_end) fire
+		 * normally — accept_input is set to 1 by neogeo_ipl_end() once
+		 * the game is fully loaded, at which point we exit and join the
+		 * normal emulation loop below. */
+		extern int accept_input;
+		while (!accept_input)
+			neogeo_runframe();
+	}
 	restart = 0;
 
 	/*** emulation loop ***/
