@@ -512,10 +512,12 @@ ActionScreen (char *msg)
   n = strlen (msg);
   fgcolour = COLOR_WHITE;
   bgcolour = BMPANE;
+  bg_transparent = 1;
 
   gprint ((640 - (n * 16)) >> 1, 248, msg, TXT_DOUBLE);
 
   gprint (168, 288, pressa, TXT_DOUBLE);
+  bg_transparent = 0;
 
   ShowScreen ();
 
@@ -535,9 +537,11 @@ InfoScreen (char *msg)
   n = strlen (msg);
   fgcolour = COLOR_WHITE;
   bgcolour = BMPANE;
+  bg_transparent = 1;
 
   gprint ((640 - (n * 16)) >> 1, 264, msg, TXT_DOUBLE);
 
+  bg_transparent = 0;
   ShowScreen ();
 }
 
@@ -557,6 +561,7 @@ char Softdev[] = "Softdev and his Neo-CD Redux (GCN) (2007)";
 char Coders1[] = "Wiimpathy / Jacobeian for NeoCD-Wii (2011)";
 char Coders2[] = "infact for Neo-CD Redux (2011)";
 char Coders3[] = "megalomaniac for Neo-CD Redux Unofficial (2013-2016)";
+char Coders4[] = "TriVoxel for ODE support and rainbow vibes (2026)";
 char Fun[]     = "GIGA POWER!";
 char iosVersion[20] = {0};
 char appVersion[20]= "NeoCD-RX v1.1.00";
@@ -570,16 +575,19 @@ char appVersion[20]= "NeoCD-RX v1.1.00";
   fgcolour = COLOR_BLACK;
   bgcolour = BMPANE;
 
+  bg_transparent = 1;
   gprint (250, 160, Title, TXT_DOUBLE);
-  gprint (60, 210, Coder, 3);
-  gprint (60, 250, Thanks, 3);
-  gprint (60, 280, Softdev, 3);
-  gprint (60, 300, Coders1, 3);
-  gprint (60, 320, Coders2, 3);
-  gprint (60, 340, Coders3, 3);
+  gprint (60, 200, Coder, 3);
+  gprint (60, 230, Thanks, 3);
+  gprint (60, 260, Softdev, 3);
+  gprint (60, 280, Coders1, 3);
+  gprint (60, 300, Coders2, 3);
+  gprint (60, 320, Coders3, 3);
+  gprint (60, 340, Coders4, 3);
   gprint (60, 360, Fun, 3);
   gprint (510, 390, iosVersion, 0);
   gprint (60, 390, appVersion, 0);
+  bg_transparent = 0;
 
   ShowScreen ();
 
@@ -587,17 +595,12 @@ char appVersion[20]= "NeoCD-RX v1.1.00";
   {
     joy = getMenuButtons();
 
-    if (joy & PAD_BUTTON_A)
+    if (joy & (PAD_BUTTON_A | PAD_BUTTON_B))
     { 
       quit = 1;
       ret = -1;
     }
 
-    if (joy & PAD_BUTTON_B)
-    {
-      quit = 1;
-      ret = -1;
-    }
   }
   return ret;
 }
@@ -648,13 +651,13 @@ LoadingScreen (char *msg)
 char menutitle[60] = { "" };
 int menu = 0;
 
-static void draw_menu(char items[][22], int maxitems, int selected)
+static void draw_menu(char items[][22], int maxitems, int minitems, int selected)
 {
    int i;
    int j;
    /* Center vertically within the backdrop menu box (263px tall, starting at y=157) */
    if (mega == 1) j = 162;
-   else j = 158 + (263 - (maxitems * 32)) / 2;
+   else j = 158 + (263 - ((maxitems - minitems) * 32)) / 2;
    int n;
    char msg[] = "";
    n = strlen (msg);
@@ -662,7 +665,7 @@ static void draw_menu(char items[][22], int maxitems, int selected)
 
    DrawScreen ();
    
-   for( i = 0; i < maxitems; i++ )
+   for( i = minitems; i < maxitems; i++ )
    {
       if ( i == selected )
       {
@@ -697,7 +700,7 @@ static void draw_menu(char items[][22], int maxitems, int selected)
 /****************************************************************************
 * do_menu
 ****************************************************************************/
-int DoMenu (char items[][22], int maxitems)
+int DoMenu (char items[][22], int maxitems, int minitems)
 {
   int quit = 0;
   int ret = 0;
@@ -705,7 +708,7 @@ int DoMenu (char items[][22], int maxitems)
 
   while (quit == 0)
   {
-    draw_menu (&items[0], maxitems, menu);
+    draw_menu (&items[0], maxitems, minitems, menu);
 
 
     joy = getMenuButtons();
@@ -713,13 +716,13 @@ int DoMenu (char items[][22], int maxitems)
     if (joy & PAD_BUTTON_UP)
     {
       menu--;
-      if (menu < 0) menu = maxitems - 1;
+      if (menu < minitems) menu = maxitems - 1;
     }
 
     if (joy & PAD_BUTTON_DOWN)
     {
       menu++;
-      if (menu == maxitems) menu = 0;
+      if (menu == maxitems) menu = minitems;
     }
 
     if (joy & PAD_BUTTON_A)
@@ -742,23 +745,26 @@ int DoMenu (char items[][22], int maxitems)
 ****************************************************************************/
 int ChooseMemCard (void)
 {
-  char titles[5][30];
+  char titles[6][36];
   int i;
   int quit = 0;
   short joy;
 
-  strncpy(titles[0], "RXsave.bin not found",    29);
-  strncpy(titles[1], "choose a save location",   29);
-  strncpy(titles[2], "",                         29);
-  strncpy(titles[3], "A - SD/ODE",             29);
-  strncpy(titles[4], "B - Memory Card",          29);
+  strncpy(titles[0], "Settings save file not found.",    32);
+  strncpy(titles[1], "Please choose a save location by", 34);
+  strncpy(titles[2], "pressing one of these buttons:",   32);
+  strncpy(titles[3], "",                                  4);
+  strncpy(titles[4], "A - SD/ODE",                       12);
+  strncpy(titles[5], "B - Memory Card",                  20);
 
   DrawScreen ();
 
-  fgcolour = COLOR_WHITE;
+  fgcolour = COLOR_BLACK;
   bgcolour = BMPANE;
+  bg_transparent = 1;
 
-  for (i = 0; i < 5; i++) gprint ((640 - (strlen (titles[i]) * 16)) >> 1, 192 + (i * 32), titles[i], TXT_DOUBLE);
+  for (i = 0; i < 6; i++) gprint ((640 - (strlen (titles[i]) * 16)) >> 1, 192 + (i * 32), titles[i], TXT_DOUBLE);
+  bg_transparent = 0;
 
   ShowScreen ();
 
@@ -810,7 +816,7 @@ int audiomenu()
     sprintf(items[3],"Mid Gain         %1.1f",opts[3]);
     sprintf(items[4],"High Gain        %1.1f",opts[4]);
     
-    ret = DoMenu (&items[0], count);
+    ret = DoMenu (&items[0], count, 0);
     switch (ret)
     {
       case -1:
@@ -1049,7 +1055,7 @@ int optionmenu()
     snprintf(items[6], 22, "Crop Overscan:%7s", CropOverscan ? "True" : "False");
     snprintf(items[7], 22, "FX / Music Equalizer");
 
-    ret = DoMenu (&items[0], count);
+    ret = DoMenu (&items[0], count, 0);
     switch (ret)
     {
       case 0:   // BIOS Region
@@ -1209,7 +1215,7 @@ int loadmenu ()
      use_IDE = 0;
      use_WKF = 0;
      use_DVD = 0;
-     ret = DoMenu (&item[0], count);
+     ret = DoMenu (&item[0], count, 0);
 
 #ifndef HW_RVL
      if (ode_detected) {
@@ -1318,7 +1324,12 @@ int load_mainmenu()
 {
   s8 ret;
   u8 quit = 0;
-  menu = 0;
+  if (have_ROM) {
+    menu = 0;
+  }
+  else {
+    menu = 2;
+  }
 
   /* Build menu dynamically — Play/Reset only shown when a game is loaded */
   char items[6][22];
@@ -1332,95 +1343,73 @@ int load_mainmenu()
 
   while (quit == 0)
   {
-    if (have_ROM)
-    {
-      strncpy(items[0], "Resume Game",   21);
-      strncpy(items[1], "Reset Game",    21);
+    strncpy(items[0], "Resume Game",   21);
+    strncpy(items[1], "Reset Game",    21);
+    /*                "Load/Change Game" */
+    strncpy(items[3], "Settings",      21);
+    strncpy(items[4], "Credits",       21);
+    strncpy(items[5], "Exit",          21);
+    count = 6;
+
+    if (have_ROM) {
       strncpy(items[2], "Change Game",   21);
-      strncpy(items[3], "Settings",      21);
-      strncpy(items[4], "Exit",          21);
-      strncpy(items[5], "Credits",       21);
-      count = 6;
+      ret = DoMenu (&items[0], count, 0);
     }
-    else
-    {
-      strncpy(items[0], "Load Game",  21);
-      strncpy(items[1], "Settings",   21);
-      strncpy(items[2], "Exit",       21);
-      strncpy(items[3], "Credits",    21);
-      count = 4;
+    else {
+      strncpy(items[2], "Load Game",     21);
+      ret = DoMenu (&items[0], count, 2);
     }
 
-    ret = DoMenu (&items[0], count);
-
-    if (have_ROM)
+    switch (ret)
     {
-      switch (ret)
+      case -1:
+      case  0:
+        ret = 0;
+        quit = 1;
+        break;
+
+      case 1:
+        neogeo_reset();
+        YM2610_sh_reset();
+        ret = 0;
+        quit = 1;
+        break;
+
+      case 2:
       {
-        case -1:
-        case  0:
-          ret = 0;
-          quit = 1;
-          break;
-
-        case 1:
-          neogeo_reset();
-          YM2610_sh_reset();
-          ret = 0;
-          quit = 1;
-          break;
-
-        case 2:
+        if (have_ROM)
         {
-          int saved_have_ROM = have_ROM;
-          int changed = loadmenu();
-          if (changed)
-            quit = 1;      /* new game selected — exit main menu and let emulator restart */
-          else
-            have_ROM = saved_have_ROM; /* backed out — restore so Resume/Reset remain available */
-          break;
+          {
+            int saved_have_ROM = have_ROM;
+            int changed = loadmenu();
+            if (changed)
+              quit = 1;      /* new game selected — exit main menu and let emulator restart */
+            else
+              have_ROM = saved_have_ROM; /* backed out — restore so Resume/Reset remain available */
+            break;
+          }
         }
-
-        case 3:
-          optionmenu();
-          break;
-
-        case 4:
-          VIDEO_ClearFrameBuffer(vmode, xfb[whichfb], COLOR_BLACK);
-          VIDEO_Flush();
-          VIDEO_WaitVSync();
-          neogeocd_exit();
-          break;
-
-        case 5:
-          credits();
-          break;
-      }
-    }
-    else
-    {
-      switch (ret)
-      {
-        case -1:
-        case  0:
+        else
+        {
           quit = loadmenu();
           break;
-
-        case 1:
-          optionmenu();
-          break;
-
-        case 2:
-          VIDEO_ClearFrameBuffer(vmode, xfb[whichfb], COLOR_BLACK);
-          VIDEO_Flush();
-          VIDEO_WaitVSync();
-          neogeocd_exit();
-          break;
-
-        case 3:
-          credits();
-          break;
+        }
       }
+
+      case 3:
+        optionmenu();
+        break;
+
+      case 4:
+        credits();
+        break;
+
+      case 5:
+        VIDEO_ClearFrameBuffer(vmode, xfb[whichfb], COLOR_BLACK);
+        VIDEO_Flush();
+        VIDEO_WaitVSync();
+        neogeocd_exit();
+        break;
     }
   }
 
