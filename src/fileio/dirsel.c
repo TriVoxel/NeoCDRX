@@ -148,7 +148,7 @@ DrawDirSelector (int maxfile, int menupos, int currsel)
             int x_start   = CLIP_X0 - sub_px;
 
             /* Rainbow bar at fixed 32-char width */
-            draw_rainbow_bar (CLIP_X0 - 4, j, MAX_DISP_CHARS * 16 + 8, 32, 4);
+            draw_rainbow_bar (CLIP_X0 - 4, j, MAX_DISP_CHARS * 16 + 8, 32);
             setfgcolour (COLOR_WHITE);
             bg_transparent = 1;
             gprint_clipped (x_start, j, m + char_skip, CLIP_X0, CLIP_X1);

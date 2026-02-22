@@ -87,16 +87,17 @@ static void unpack (void);
 
 unsigned short SaveDevice = 1;            // 0=MemCard, 1=SD/ODE
 unsigned char DefaultLoadDevice = 0;      // 0=None,1=SD,2=USB,3=IDE-EXI,4=WKF,5=DVD
-unsigned char MenuTrigger = 4;            // 0=L,1=R,2=L+R,3=C-left,4=C-right
+unsigned char MenuTrigger = 3;            // 0=L,1=R,2=L+R,3=C-left,4=C-right
 unsigned char VideoMode = 0;              // 0=Auto,1=480p,2=480i
-unsigned char SkipBios = 0;              // 0=False, 1=True
-unsigned char CropOverscan = 1;          // 0=False, 1=True (default crops left 8px)
+unsigned char SkipBios = 0;               // 0=False, 1=True
+unsigned char CropOverscan = 1;           // 0=False, 1=True
+unsigned char FilterMode = 1;             // 0=Nearest, 1=Bilinear
 
 /* Prefs file path — tried bare (GC/ODE) then sd: prefix (Wii) */
 #define PREFS_PATH_A  "/NeoCDRX/NeoCDRXprefs.bin"
 #define PREFS_PATH_B  "sd:/NeoCDRX/NeoCDRXprefs.bin"
 
-typedef struct { unsigned char SaveDevice; unsigned char DefaultLoadDevice; unsigned char neogeo_region; unsigned char MenuTrigger; unsigned char VideoMode; unsigned char SkipBios; unsigned char CropOverscan; unsigned char _pad[1]; } NeoPrefs;
+typedef struct { unsigned char SaveDevice; unsigned char DefaultLoadDevice; unsigned char neogeo_region; unsigned char MenuTrigger; unsigned char VideoMode; unsigned char SkipBios; unsigned char CropOverscan; unsigned char FilterMode; } NeoPrefs;
 
 void save_prefs(void)
 {
@@ -108,6 +109,7 @@ void save_prefs(void)
   p.VideoMode = VideoMode;
   p.SkipBios = SkipBios;
   p.CropOverscan = CropOverscan;
+  p.FilterMode = FilterMode;
 
   /* Try subdirectory paths first, then fall back to root of the filesystem.
    * Do NOT call mkdir() — the devkitPPC newlib stub crashes on GC when the
@@ -130,10 +132,11 @@ void load_prefs(void)
     SaveDevice = p.SaveDevice < 2 ? p.SaveDevice : 1;
     DefaultLoadDevice = p.DefaultLoadDevice < 6 ? p.DefaultLoadDevice : 0;
     neogeo_region = p.neogeo_region < 3 ? p.neogeo_region : 0;
-    MenuTrigger = p.MenuTrigger < 5 ? p.MenuTrigger : 0;
+    MenuTrigger = p.MenuTrigger < 5 ? p.MenuTrigger : 3;
     VideoMode = p.VideoMode < 3 ? p.VideoMode : 0;
     SkipBios = p.SkipBios < 2 ? p.SkipBios : 0;
     CropOverscan = p.CropOverscan < 2 ? p.CropOverscan : 1;
+    FilterMode = p.FilterMode < 2 ? p.FilterMode : 1;
   }
   fclose(fp);
 }
@@ -235,8 +238,9 @@ circle (int cx, int cy, int radius)
  * w: total width including padding, h: height in pixels.
  * bevel: corner chamfer size in pixels.
  * The gradient is a cross-section of the 640px-wide scrolling rainbow. */
-void draw_rainbow_bar(int x, int y, int w, int h, int bevel)
+void draw_rainbow_bar(int x, int y, int w, int h)
 {
+  int bevel = 4;
   int row, col;
   for (row = 0; row < h; row++) {
     /* Straight bevel: cut pixels from each corner proportional to distance
@@ -639,8 +643,10 @@ LoadingScreen (char *msg)
   n = strlen (msg);
   fgcolour = COLOR_WHITE;
   bgcolour = COLOR_BLACK;
+  bg_transparent = 1;
 
   gprint ((640 - (n * 16)) >> 1, 410, msg, TXT_DOUBLE);
+  bg_transparent = 0;
 
   ShowScreen ();
 }
@@ -672,7 +678,7 @@ static void draw_menu(char items[][22], int maxitems, int minitems, int selected
          int text_x = ( 640 - ( strlen(items[i]) << 4 )) >> 1;
          int bar_x  = text_x - 4;
          int bar_w  = (strlen(items[i]) << 4) + 8;
-         draw_rainbow_bar(bar_x, j, bar_w, 32, 4);
+         draw_rainbow_bar(bar_x, j, bar_w, 32);
          setfgcolour (COLOR_WHITE);
          bg_transparent = 1;
          gprint( text_x, j, items[i], TXT_DOUBLE);
@@ -782,59 +788,6 @@ int ChooseMemCard (void)
   }
 
   return 1;
-}
-
-/****************************************************************************
-* Audio menu
-****************************************************************************/
-
-int audiomenu()
-{
-  int prevmenu = menu;
-  int quit = 0;
-  int ret;
-  char buf[22];
-  int count = 6;
-  static char items[6][22] = {
-    { "SFX Volume:       1.0" },
-    { "MP3 Volume:       1.0" }, 
-    { "Low Gain:         1.0" }, 
-    { "Mid Gain:         1.0" },
-    { "High Gain:        1.0" },
-    { "Go Back" }
-
-  };
-  static float opts[5] = { 1.0f, 1.0f, 1.0f, 1.0f, 1.0f };
-
-  menu = 0;
-
-  while (quit == 0)
-  {
-    sprintf(items[0],"SFX Volume       %1.1f",opts[0]);
-    sprintf(items[1],"MP3 Volume       %1.1f",opts[1]);
-    sprintf(items[2],"Low Gain         %1.1f",opts[2]);
-    sprintf(items[3],"Mid Gain         %1.1f",opts[3]);
-    sprintf(items[4],"High Gain        %1.1f",opts[4]);
-    
-    ret = DoMenu (&items[0], count, 0);
-    switch (ret)
-    {
-      case -1:
-      case 5:
-         quit = 1;
-         break;
-      default:
-          opts[menu-0] += 0.1f;
-          if ( opts[menu-0] > 2.0f ) opts[menu-0] = 1.0f;
-          strcpy(buf, items[menu]);
-          buf[18]=0;
-          sprintf(items[menu],"%s%1.1f", buf, opts[menu-0]);
-         break;
-	}
-  }
-  mixer_set( opts[0], opts[1], opts[2], opts[3], opts[4]);
-  menu = prevmenu;
-  return 0;
 }
 
 /****************************************************************************
@@ -955,6 +908,7 @@ static int confirm_vmode(void)
     DrawScreen();
     fgcolour = COLOR_BLACK;
     bgcolour = BMPANE;
+    bg_transparent = 1;
 
     gprint((640 - (21 * 16)) >> 1, 220, (char *)"Keep this video mode?", TXT_DOUBLE);
 
@@ -963,28 +917,28 @@ static int confirm_vmode(void)
     gprint((640 - (strlen(countdown) * 16)) >> 1, 258, countdown, TXT_DOUBLE);
 
     /* Draw two buttons: Revert | Keep */
-    strncpy(revert_item, " Revert ", 21);
-    strncpy(keep_item,   "  Keep  ", 21);
+    strncpy(revert_item, "Revert", 21);
+    strncpy(keep_item,   " Keep ", 21);
 
     if (selected == 0) {
-      draw_rainbow_bar(178 - 4, 320, 128 + 8, 32, 6);
+      draw_rainbow_bar(178 - 4, 320, 96 + 8, 32);
       setfgcolour(COLOR_WHITE);
       bg_transparent = 1;
       gprint(178, 320, revert_item, TXT_DOUBLE);
       bg_transparent = 0;
       setfgcolour(COLOR_BLACK);
       bg_transparent = 1;
-      gprint(338, 320, keep_item, TXT_DOUBLE);
+      gprint(370, 320, keep_item, TXT_DOUBLE);
       bg_transparent = 0;
     } else {
       setfgcolour(COLOR_BLACK);
       bg_transparent = 1;
       gprint(178, 320, revert_item, TXT_DOUBLE);
       bg_transparent = 0;
-      draw_rainbow_bar(338 - 4, 320, 128 + 8, 32, 6);
+      draw_rainbow_bar(370 - 4, 320, 96 + 8, 32);
       setfgcolour(COLOR_WHITE);
       bg_transparent = 1;
-      gprint(338, 320, keep_item, TXT_DOUBLE);
+      gprint(370, 320, keep_item, TXT_DOUBLE);
       bg_transparent = 0;
     }
 
@@ -1025,14 +979,66 @@ static const char *load_device_label(unsigned char v)
   }
 }
 
-int optionmenu()
+/****************************************************************************
+* Audio menu
+****************************************************************************/
+int audiomenu()
 {
   int prevmenu = menu;
   int quit = 0;
   int ret;
-  int num_save_devices = 2;
-  int count = 8;
-  char items[8][22];
+  char buf[22];
+  int count = 5;
+  static char items[5][22] = {
+    { "SFX Volume:       1.0" },
+    { "MP3 Volume:       1.0" },
+    { "Low Gain:         1.0" },
+    { "Mid Gain:         1.0" },
+    { "High Gain:        1.0" }
+
+  };
+  static float opts[5] = { 1.0f, 1.0f, 1.0f, 1.0f, 1.0f };
+
+  menu = 0;
+
+  while (quit == 0)
+  {
+    sprintf(items[0],"SFX Volume       %1.1f",opts[0]);
+    sprintf(items[1],"MP3 Volume       %1.1f",opts[1]);
+    sprintf(items[2],"Low Gain         %1.1f",opts[2]);
+    sprintf(items[3],"Mid Gain         %1.1f",opts[3]);
+    sprintf(items[4],"High Gain        %1.1f",opts[4]);
+
+    ret = DoMenu (&items[0], count, 0);
+    switch (ret)
+    {
+      case -1:
+        quit = 1;
+        break;
+      default:
+          opts[menu-0] += 0.1f;
+          if ( opts[menu-0] > 2.0f ) opts[menu-0] = 1.0f;
+          strcpy(buf, items[menu]);
+          buf[18]=0;
+          sprintf(items[menu],"%s%1.1f", buf, opts[menu-0]);
+         break;
+    }
+    if (dirsel_back_to_main) { dirsel_back_to_main = 0; quit = 1; }
+  }
+  mixer_set( opts[0], opts[1], opts[2], opts[3], opts[4]);
+  menu = prevmenu;
+  return 0;
+}
+
+/****************************************************************************
+* Graphics menu
+****************************************************************************/
+int graphicsmenu() {
+  int prevmenu = menu;
+  int quit = 0;
+  int ret;
+  int count = 3;
+  char items[3][22];
 
   /* Track VideoMode on entry so we can detect changes on exit */
   unsigned char entry_video_mode = VideoMode;
@@ -1040,82 +1046,29 @@ int optionmenu()
   menu = 0;
 
   while (quit == 0)
-  {
-    if (neogeo_region == 0)      sprintf(items[0], "Region:         JAPAN");
-    else if (neogeo_region == 1) sprintf(items[0], "Region:           USA");
-    else                         sprintf(items[0], "Region:        EUROPE");
-
-    if (SaveDevice == 0) sprintf(items[1], "Save Device: MEM Card");
-    else                 sprintf(items[1], "Save Device:   SD/ODE");
-
-    snprintf(items[2], 22, "Load Device: %8s", load_device_label(DefaultLoadDevice));
-    snprintf(items[3], 22, "Menu Toggle: %8s", menu_trigger_label(MenuTrigger));
-    snprintf(items[4], 22, "Video Mode:  %8s", vmode_label(VideoMode));
-    snprintf(items[5], 22, "Skip BIOS:   %8s", SkipBios ? "True" : "False");
-    snprintf(items[6], 22, "Crop Overscan:%7s", CropOverscan ? "True" : "False");
-    snprintf(items[7], 22, "FX / Music Equalizer");
-
-    ret = DoMenu (&items[0], count, 0);
-    switch (ret)
     {
-      case 0:   // BIOS Region
-        neogeo_region++;
-        if (neogeo_region > 2) neogeo_region = 0;
-        save_prefs();
-        break;
+      snprintf(items[1], 22, "Crop Overscan:%7s", CropOverscan ? "True" : "False");
+      snprintf(items[0], 22, "Filter Mode:%9s", FilterMode ? "Bilinear" : "Nearest");
+      snprintf(items[2], 22, "Video Mode:   %7s", vmode_label(VideoMode));
 
-      case 1:   // Save Device
-        SaveDevice++;
-        if (SaveDevice >= num_save_devices) SaveDevice = 0;
-        save_prefs();
-        break;
-
-      case 2:   // Default Load Device
+      ret = DoMenu (&items[0], count, 0);
+      switch (ret)
       {
-#ifdef HW_RVL
-        DefaultLoadDevice++;
-        if (DefaultLoadDevice > 3) DefaultLoadDevice = 0;
-#else
-        if      (DefaultLoadDevice == 0) DefaultLoadDevice = 1;
-        else if (DefaultLoadDevice == 1) DefaultLoadDevice = 3;
-        else if (DefaultLoadDevice == 3) DefaultLoadDevice = 4;
-        else if (DefaultLoadDevice == 4) DefaultLoadDevice = 5;
-        else                             DefaultLoadDevice = 0;
-#endif
-        save_prefs();
-        break;
+        case 0:   // Filter mode
+          FilterMode = !FilterMode;
+          break;
+        case 1:   // Crop Overscan
+          CropOverscan = !CropOverscan;
+          break;
+        case 2:   // Video Mode — cycle only, apply on exit
+          VideoMode++;
+          if (VideoMode > 2) VideoMode = 0;
+          break;
+        case -1:
+          quit = 1;
+          break;
       }
-
-      case 3:   // Menu Trigger
-        MenuTrigger++;
-        if (MenuTrigger > 4) MenuTrigger = 0;
-        save_prefs();
-        break;
-
-      case 4:   // Video Mode — cycle only, apply on exit
-        VideoMode++;
-        if (VideoMode > 2) VideoMode = 0;
-        break;
-
-      case 5:   // Skip BIOS
-        SkipBios = !SkipBios;
-        save_prefs();
-        break;
-
-      case 6:   // Crop Overscan
-        CropOverscan = !CropOverscan;
-        save_prefs();
-        break;
-
-      case 7:   // FX / Music Equalizer
-        audiomenu();
-        break;
-
-      case -1:
-        quit = 1;
-        break;
     }
-  }
 
   /* If VideoMode changed, apply and show confirm dialog */
   if (VideoMode != entry_video_mode)
@@ -1125,17 +1078,92 @@ int optionmenu()
 
     apply_vmode(vmode_for_setting(VideoMode));
 
-    if (confirm_vmode())
-    {
-      save_prefs();
-    }
-    else
+    if (!(confirm_vmode()))
     {
       VideoMode = old_setting;
       apply_vmode(old_vmode);
     }
   }
+  save_prefs();
+  menu = prevmenu;
+  return 0;
+}
 
+int optionmenu() {
+  int prevmenu = menu;
+  int quit = 0;
+  int ret;
+  int num_save_devices = 2;
+  int count = 7;
+  char items[7][22];
+
+  menu = 0;
+
+  while (quit == 0)
+    {
+    if      (neogeo_region == 0) sprintf(items[0], "Region:         JAPAN");
+    else if (neogeo_region == 1) sprintf(items[0], "Region:           USA");
+    else                         sprintf(items[0], "Region:        EUROPE");
+    if (SaveDevice == 0)         sprintf(items[1], "Save Device: MEM Card");
+    else                         sprintf(items[1], "Save Device:   SD/ODE");
+
+    snprintf(items[2], 22, "Load Device: %8s", load_device_label(DefaultLoadDevice));
+    snprintf(items[3], 22, "Menu Toggle: %8s", menu_trigger_label(MenuTrigger));
+    snprintf(items[4], 22, "Skip BIOS:   %8s", SkipBios ? "True" : "False");
+    snprintf(items[5], 22, "FX/Music Equalizer  >");
+    snprintf(items[6], 22, "Graphics Settings   >");
+
+    ret = DoMenu (&items[0], count, 0);
+    switch (ret)
+      {
+      case 0:   // BIOS Region
+        neogeo_region++;
+        if (neogeo_region > 2) neogeo_region = 0;
+        break;
+
+      case 1:   // Save Device
+        SaveDevice++;
+        if (SaveDevice >= num_save_devices) SaveDevice = 0;
+        break;
+
+      case 2:   // Default Load Device
+      {
+#ifdef HW_RVL
+        DefaultLoadDevice++;
+        if      (DefaultLoadDevice > 3) DefaultLoadDevice = 0;
+#else
+        if      (DefaultLoadDevice == 0) DefaultLoadDevice = 1;
+        else if (DefaultLoadDevice == 1) DefaultLoadDevice = 3;
+        else if (DefaultLoadDevice == 3) DefaultLoadDevice = 4;
+        else if (DefaultLoadDevice == 4) DefaultLoadDevice = 5;
+        else                             DefaultLoadDevice = 0;
+#endif
+        break;
+      }
+
+      case 3:   // Menu Toggle
+        MenuTrigger++;
+        if (MenuTrigger > 4) MenuTrigger = 0;
+        break;
+
+      case 4:   // Skip BIOS
+        SkipBios = !SkipBios;
+        break;
+
+      case 5:   // FX / Music Equalizer
+        audiomenu();
+        break;
+
+      case 6:
+        graphicsmenu();
+        break;
+
+      case -1:
+        quit = 1;
+        break;
+    }
+  }
+  save_prefs();
   menu = prevmenu;
   return 0;
 }

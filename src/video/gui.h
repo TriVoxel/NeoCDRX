@@ -30,7 +30,7 @@ void LoadingScreen (char *msg);
 void bannerscreen (void);
 int load_mainmenu (void);
 
-void draw_rainbow_bar(int x, int y, int w, int h, int bevel);
+void draw_rainbow_bar(int x, int y, int w, int h);
 extern int bg_rainbow;
 extern int bg_transparent;
 

@@ -43,6 +43,7 @@ static u8 texturemem[TEXSIZE] ATTRIBUTE_ALIGN (32);
 
 GXTexObj texobj;
 int vwidth, vheight, oldvwidth, oldvheight;
+static int oldFilterMode = -1;   /* -1 forces first-frame init */
 
 /****************************************************************************
  * draw_init
@@ -68,7 +69,11 @@ draw_init (void)
 
   GX_InitTexObj (&texobj, texturemem, vwidth, vheight, GX_TF_RGB565,
          GX_CLAMP, GX_CLAMP, GX_FALSE);
-  GX_InitTexObjFilterMode (&texobj, GX_NEAR, GX_NEAR);
+
+  /* Bilinear filtering smooths scaled output; nearest-neighbour preserves
+   * pixel-perfect appearance at integer scales. */
+  u8 filter = FilterMode ? GX_LINEAR : GX_NEAR;
+  GX_InitTexObjFilterMode (&texobj, filter, filter);
 }
 
 /****************************************************************************
@@ -175,10 +180,11 @@ update_video (int width, int height, char *vbuffer)
 
   whichfb ^= 1;
 
-  if ((oldvheight != vheight) || (oldvwidth != vwidth))
+  if ((oldvheight != vheight) || (oldvwidth != vwidth) || (oldFilterMode != (int)FilterMode))
     {
-      oldvwidth  = vwidth;
-      oldvheight = vheight;
+      oldvwidth        = vwidth;
+      oldvheight       = vheight;
+      oldFilterMode = (int)FilterMode;
       draw_init ();
 
       GX_SetViewport (0, 0, vmode->fbWidth, vmode->efbHeight, 0, 1);

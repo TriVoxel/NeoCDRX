@@ -91,6 +91,7 @@ extern unsigned char MenuTrigger;       /* 0=L,1=R,2=L+R,3=C-left,4=C-right */
 extern unsigned char VideoMode;         /* 0=Auto,1=480p,2=480i */
 extern unsigned char SkipBios;          /* 0=False, 1=True */
 extern unsigned char CropOverscan;      /* 0=False, 1=True */
+extern unsigned char FilterMode;        /* 0=Nearest (pixel-perfect), 1=Bilinear */
 extern int dirsel_back_to_main;         /* set by DirSelector to signal return-to-main */
 extern int use_SD;
 extern int use_USB;
