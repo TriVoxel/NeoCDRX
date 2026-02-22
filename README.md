@@ -67,11 +67,9 @@ https://github.com/niuus/NeoCDRX/blob/main/NeoCDRX_manual.pdf
 
 ## INSTALLATION AND USE
 
-An SD card is highly recommended. To use NeoCD-RX on the GameCube, you will need to extract the .zip file to the root of your SD card. You can rename `neocd-rx.dol` to whatever you want, but make sure you don't rename the folders.
+An SD card is highly recommended. To use NeoCD-RX on the GameCube, you will need to extract the .zip file to the root of your SD card. You can rename `neocd-rx.dol` to whatever you want and put it wherever you like, just make sure you don't rename the folders!
 
-Finally, you need to obtain a proper dump of the _Neo Geo CD/CDZ_ console BIOS.
-Copy the file inside the "**_\NeoCDRX\bios_**" directory and name it "**_NeoCD.bin_**".
-The emulator only works with the following:
+Finally, you need to obtain a proper dump of the _Neo Geo CD/CDZ_ console BIOS. Copy the file inside the "**_\NeoCDRX\bios_**" directory and name it "**_NeoCD.bin_**". The emulator only works with the following:
 
 ```
 Neo Geo CDZ BIOS (NeoCD.bin)
