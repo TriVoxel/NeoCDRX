@@ -1,5 +1,5 @@
 # NeoCD RX
-https://github.com/niuus/NeoCDRX/
+[_**Check out the original project by niuus!**_](https://github.com/niuus/NeoCDRX/)
 
 **_NeoCD RX_** is a _Neo Geo CD / Neo Geo CDZ_ emulator for the _GameCube_, _Wii_, and _Wii U_'s
 Virtual Wii. It owes its existence to various other emulators:
@@ -8,9 +8,7 @@ Virtual Wii. It owes its existence to various other emulators:
 based on **_NeoCD/SDL_** 0.3.1 (Foster) and **_NeoGeo CDZ_** (NJ) emulator,
 which are source ports of the original **_NeoCD_** emulator (Fabrice Martinez).
 
-**_NeoCD RX_** is a "homebrew application" which means you will need a way to run
-unsigned code on your Nintendo Wii. The best website for getting started with
-Wii homebrew is WiiBrew (www.wiibrew.org).
+**_NeoCD RX_** is a "homebrew application" which means you will need a way to run unsigned code on your Nintendo Wii. The best website for getting started with Wii homebrew is WiiBrew (www.wiibrew.org).
 
 Based/forked from:
 https://github.com/emukidid/neogeo-cd-redux
@@ -21,27 +19,47 @@ https://github.com/emukidid/neogeo-cd-redux
 ## FEATURES
 
 * Z80 emulator core 3.6
-*	M68000 emulator core 3.3
-*	Wii Remote, Wii Remote Plus, Wii Remote+Nunchuk, and GameCube controller support
-*	SD/SDHC, USB, WKF (GameCube), IDE-EXI V1, DVD support
-*	UStealth USB devices support
-*	Region select for uncut content and extra languages (USA / Europe / Japan)
-*	Neo Geo CD Virtual Memory Card (8KiB battery-backed SRAM chip) support. Save directly to SD/USB or to your physical GameCube card for max nostalgia!
-*	Sound FX / Music 3-Band equalizer
-*	Super fast loading times. Original console weakness is no more!
+	* M68000 emulator core 3.3
+	* Wii Remote, Wii Remote Plus, Wii Remote+Nunchuk, and GameCube controller support
+	* SD/SDHC, USB, WKF (GameCube), IDE-EXI V1, DVD support
+	* UStealth USB devices support
+	* Region select for uncut content and extra languages (USA / Europe / Japan)
+	* Neo Geo CD Virtual Memory Card (8KiB battery-backed SRAM chip) support. Save directly to SD/USB or to your physical GameCube card for max nostalgia!
+	* Sound FX / Music 3-Band equalizer
+	* Super fast loading times. Original console weakness is no more!
+	* Extensive options to suit every play style
 * Available in various skins/colors
 * Open Source!
 
 
 ## RECENT CHANGELOG
 
-[1.0.02 - April 03, 2023]
-* First release.
-* Fully working SDHC & USB support. You shouldn't see the emulator complaining again about the BIOS not being found, if you already have the proper file in the correct folder, specially on USB devices.
-* Virtual Neo Geo Memory Card saving is fixed again. Use SD/USB or the GameCube Memory Card, the latter also works on Wii (backwards compatible unit).
-* Fixed GameCube controller analog stick support. It wasn't working on Wii, only when used on a GameCube console.
-* Rearranged internal menus for future expansion.
-* Some tidying up.
+[1.1.00 - Feb 22, 2026]
+* Improved hardware support
+	* Added support for GCLoader & CubeODE
+	* Added support for exFAT SD cards
+	* Faster loading times thanks to libogc2 & libdvm upgrade
+* Improved settings
+	* Added settings save/load
+	* Added filtering options
+		* Re-written GX pipeline gives you pixel perfect integer scaling.
+		* You can use nearest neighbor filtering for ultra-sharp, perfectly-crisp graphics, or bilinear to smooth out the jaggies!
+	* Added option to skip Neo Geo BIOS
+	* Added "Crop Overscan" option to hide unintended graphical glitches
+	* You can now set a preferred controller button combo or button to bring up the main menu
+	* You can now set a default load device so you can jump into games even faster!
+	* You can nowforce progressive scan or interlacing!
+* Upgraded user interface
+	* Unusable buttons are now hidden
+	* Improved file browser
+	* Selected button stands out better (Pretty rainbowssssss!!!!!!)
+* Changed button mappings to make them more intuitive
+* Bug fixes
+	* Fixed bug where a power cycle was required to re-launch NeoCDRX after closing it.
+	* Fixed a bug in the file browser where a page could be empty if you scrolled it weirdly
+	* Other minor bug fixes
+* The entire experience has been overhauled!
+* Huge thank you to niuus for maintaining the original. I couldn't have done it without them, or all the other amazing and talent people who built the foundation of this software. Check out the in-app credits menu!
 
 [older update history in the **NeoCDRX_manual.pdf**]
 https://github.com/niuus/NeoCDRX/blob/main/NeoCDRX_manual.pdf
@@ -49,13 +67,7 @@ https://github.com/niuus/NeoCDRX/blob/main/NeoCDRX_manual.pdf
 
 ## INSTALLATION AND USE
 
-To use NeoCD-RX on the Wii / Wii U's Virtual Wii, you will need to extract the
-"**_apps_**" and "**_NeoCDRX_**" folders (directories) from the .zip directly to the root
-of your SD or USB media. It comes pre-packaged in the Homebrew Channel format,
-also compatible with the official forwarders. Then, you need to place your game
-files and music tracks into individually named folders inside the "**_\NeoCDRX\games_**"
-directory (an in-depth explanation for this in the correspondent section further below).
-For the GameCube port, you only need to take care of the "**_NeoCDRX_**" folder included.
+An SD card is highly recommended. To use NeoCD-RX on the GameCube, you will need to extract the .zip file to the root of your SD card. You can rename `neocd-rx.dol` to whatever you want, but make sure you don't rename the folders.
 
 Finally, you need to obtain a proper dump of the _Neo Geo CD/CDZ_ console BIOS.
 Copy the file inside the "**_\NeoCDRX\bios_**" directory and name it "**_NeoCD.bin_**".
@@ -85,43 +97,39 @@ files from your device "**_\NeoCDRX_**" folder, be it SD or USB.
 ## CONFIGURATION
 
 To configure NeoCD-RX, press 'A' on the "Settings" box. This will bring up a
-screen where you can configure "Region", "Save Device", and "FX / Music Equalizer".
-
-```
-• "Region" will allow you to change the emulated console region, to access other
-languages and in some cases, change or uncensor game content (fatalities, blood,
-difficulty, lives, title screens, etc.). Reload the game (not reset) for the
-setting to take effect.
-
-• "Save Device" offers two options, use "SD/USB" to save the SRAM memory
-(sort of a virtual memory card implemented inside the real Neo Geo CD console)
-directly to the media drive, or use "MEM Card" to save to a physical GameCube
-Memory Card, as you would on a real Neo Geo AES, to take your progress to
-another console, or just for the nostalgia factor.
-
-• "FX / Music Equalizer" allows you to raise the volume on sound FX or MP3
+screen where you can configure the following:
+- Region
+	- Will allow you to change the emulated console region, to access other languages and in some cases, change or uncensor game content (fatalities, blood, difficulty, lives, title screens, etc.). Reload the game (not reset) for the setting to take effect.
+- Save Device
+	- Offers two options, use "SD/USB" to save the SRAM memory (sort of a virtual memory card implemented inside the real Neo Geo CD console) directly to the media drive, or use "MEM Card" to save to a physical GameCube Memory Card, as you would on a real Neo Geo AES, to take your progress to another console, or just for the nostalgia factor.
+- Menu Toggle
+	- Allows you to customize the gamepad buttons which will pause emulation and bring you back to the main menu
+- Skip BIOS
+	- Skips the Neo Geo BIOS animation. Saves a lot of time loading into games, but you miss out on the nostalgia. );
+- FX / Music Equalizer
+	- Allows you to raise the volume on sound FX or MP3
 tracks, or raise the gain in Low / Mid / High frequencies to your liking.
-```
+- Graphics Settings
+	- Crop overscan
+		- Shows or hides the left and right edges of the screen which were normally hidden by old CRTs and aren't meant to be seen. Disabling this will reveal graphical artifacts present in the original games.
+	- Filter Mode
+		- Lets you choose between "Bilinear" sampling and "Nearest" (nearest neighbor) sampling. Bilinear smooths things out to give them a more natural and authentic look. Nearest neighbor gives you sharp, clean, pixel perfect graphics in the highest definition.
+	- Video Mode
+		- Can either automatically detect the best video mode (recommended), or lets you override it to force progressive or interlaced video.
 
 
 ## PREPARING THE GAMES FOR USE WITH THE EMULATOR
 
-For every game disc, you need to create a subdirectory inside the included
-"**_\NeoCDRX\games_**" named whatever you like, and copy all the game data files
-there. Inside this folder, create another subdirectory called "**_mp3_**", where
-you have to copy your music tracks. **IMPORTANT**: even if you won't use the
-music, the folder is needed.
+_Note: This is planned to change in the near future. I am planning some big changes to streamline this process, but will offer backwards compatibility to users who go through the trouble of setting it up this way._
 
-The music tracks need to be encoded from the original CD's Red Book standard
-44.1 kHz WAV, to MP3 format (128kbps minimum, or better), named exactly
-"**_TrackXX.mp3_**" where XX is a number that always starts at 02, as the data
-track is always 01. Free CD audio ripping software is readily available.
+For every game disc, you need to create a subdirectory inside the included "**_\NeoCDRX\games_**" named whatever you like, and copy all the game data files there. Inside this folder, create another subdirectory called "**_mp3_**", where you have to copy your music tracks. **IMPORTANT**: even if you won't use the music, the folder is needed.
+
+The music tracks need to be encoded from the original CD's Red Book standard 44.1 kHz WAV, to MP3 format (128kbps minimum, or better), named exactly "**_TrackXX.mp3_**" where XX is a number that always starts at 02, as the data track is always 01. Free CD audio ripping software is readily available.
 
 Examples and pictures are inside the **NeoCDRX_manual.pdf**
 https://github.com/niuus/NeoCDRX/blob/main/NeoCDRX_manual.pdf
 
-After this, you are more than ready to start playing. Each game folder you
-make will be treated by the emulator as a full CD.
+After this, you are more than ready to start playing. Each game folder you make will be treated by the emulator as a full CD.
 
 
 ## SUPPORTED CONTROLLERS
@@ -129,25 +137,25 @@ make will be treated by the emulator as a full CD.
 NeoCD RX currently supports the following:
 
 ```
+	• GameCube controller
+
 	• Wii Remote (horizontal)
 
 	• Wii Remote Plus (or Wii MotionPlus adapter)
 
 	• Wii Remote+Nunchuk
-
-	• GameCube controller
 ```
 
 ## DEFAULT MAPPINGS
 
 ### GameCube Controller
-			Neo Geo A = B
-			Neo Geo B = A
-			Neo Geo C = Y
-			Neo Geo D = X
+			Neo Geo A = A
+			Neo Geo B = B
+			Neo Geo C = X
+			Neo Geo D = Y
 			Neo Geo Select = Z
 			Neo Geo Start = START
-			Neo Geo directions = Dpad or Analog Stick
+			Neo Geo directions = D-pad or Analog Stick
 ### Wii Remote (horizontal)
 			Neo Geo A = 1
 			Neo Geo B = 2
@@ -176,9 +184,9 @@ support it)_
 ```
 _Navigation_
 ```
-Dpad or Left Analog Stick (GameCube controller)
-Dpad (Horizontal Wii Remote)
-Dpad or Nunchuk Analog Stick (Wii Remote+Nunchuk)
+D-pad or Left Analog Stick (GameCube controller)
+D-pad (Horizontal Wii Remote)
+D-pad or Nunchuk Analog Stick (Wii Remote+Nunchuk)
 ```
 _Enter directory or Menu option / Change setting_
 ```
@@ -195,15 +203,15 @@ _Go back from Game List_
 "Z" button (GameCube controller)
 Button "HOME" (Wii Remote / Wii Remote+Nunchuk)
 ```
-_Navigate one page forward on the Game List (when you have more than 8 titles)_
-```
-"R" button (GameCube controller)
-"PLUS (+)" button (Wii Remote / Wii Remote+Nunchuk)
-```
 _Navigate one page backwards on the Game List (when you have more than 8 titles)_
 ```
-"L" button (GameCube controller)
+"L" button or d-pad left (GameCube controller)
 "MINUS (-)" button (Wii Remote / Wii Remote+Nunchuk)
+```
+_Navigate one page forward on the Game List (when you have more than 8 titles)_
+```
+"R" button or d-pad right (GameCube controller)
+"PLUS (+)" button (Wii Remote / Wii Remote+Nunchuk)
 ```
 _Mount and run a valid game directory_
 ```
@@ -236,10 +244,11 @@ Hold "L" button right before the emulator is loading to activate
 • TehSkeen forum (2006-2009)
 • NeoCDRX emu bg - Style 1 (catar1n0)
 • NeoCDRX menu design (NiuuS)
+• NeoCDRX v1.1.0 revamp (TriVoxel)
 ```
 
 
 ## RELEVANT LINKS
 
 * Newest/Latest NeoCDRX release at:
-https://github.com/niuus/NeoCDRX/releases
+https://github.com/trivoxel/NeoCDRX/releases
