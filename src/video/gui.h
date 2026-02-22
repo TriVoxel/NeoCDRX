@@ -18,6 +18,7 @@
 #define INVTEXT 0x628a6277
 
 void gprint (int x, int y, char *text, int mode);
+void gprint_clipped (int x, int y, char *text, int clip_x0, int clip_x1);
 void ShowScreen (void);
 void DrawScreen (void);
 void setbgcolour (u32 colour);

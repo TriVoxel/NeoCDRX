@@ -59,7 +59,7 @@ static void init_rainbow(void)
   int i;
   for (i = 0; i < 640; i++) {
     /* Map pixel to a position in [0, 6] along the half-spectrum.
-     * First half (0-319): R→V.  Second half (320-639): V→R (mirror). */
+     * First half (0-319): R->V.  Second half (320-639): V->R (mirror). */
     float pos;
     if (i < 320)
       pos = i * 6.0f / 320.0f;
@@ -75,7 +75,7 @@ static void init_rainbow(void)
     float g = stops[s0][1] + t * (stops[s1][1] - stops[s0][1]);
     float b = stops[s0][2] + t * (stops[s1][2] - stops[s0][2]);
 
-    /* BT.601 limited-range RGB → YCbCr */
+    /* BT.601 limited-range RGB -> YCbCr */
     rain_y[i]  = (u8)( 0.257f*r + 0.504f*g + 0.098f*b + 16.5f);
     rain_cb[i] = (u8)(-0.148f*r - 0.291f*g + 0.439f*b + 128.5f);
     rain_cr[i] = (u8)( 0.439f*r - 0.368f*g - 0.071f*b + 128.5f);
@@ -342,6 +342,64 @@ drawcharw (int x, int y, char c)
     }
 }
 
+/* drawcharw_clipped — like drawcharw (TXT_DOUBLE, double-height) but only writes
+ * pixel word-pairs whose left screen pixel falls within [clip_x0, clip_x1).
+ * x, clip_x0 and clip_x1 must all be even (YUY2 word-boundary aligned). */
+static void
+drawcharw_clipped (int x, int y, char c, int clip_x0, int clip_x1)
+{
+    int yy, xx;
+    int offset = (y * 320) + (x >> 1);
+    int bits;
+
+    for (yy = 0; yy < 16; yy++)
+    {
+        bits = console_font_8x16[((unsigned char)c << 4) + yy];
+        for (xx = 0; xx < 8; xx++)
+        {
+            int px = x + (xx << 1);   /* left screen pixel of this word pair */
+            if (px >= clip_x0 && px < clip_x1)
+            {
+                if (bits & 0x80)
+                    xfb[whichfb][offset + xx] = xfb[whichfb][offset + 320 + xx] = fgcolour;
+                else if (bg_rainbow)
+                {
+                    int px0 = (px     + rainbow_phase) % 640;
+                    int px1 = (px + 1 + rainbow_phase) % 640;
+                    u8 Y0 = rain_y[px0], Y1 = rain_y[px1];
+                    u8 Cb = (u8)(((int)rain_cb[px0] + (int)rain_cb[px1]) >> 1);
+                    u8 Cr = (u8)(((int)rain_cr[px0] + (int)rain_cr[px1]) >> 1);
+                    u32 w = ((u32)Y0 << 24) | ((u32)Cb << 16) | ((u32)Y1 << 8) | Cr;
+                    xfb[whichfb][offset + xx] = xfb[whichfb][offset + 320 + xx] = w;
+                }
+                else if (!bg_transparent)
+                    xfb[whichfb][offset + xx] = xfb[whichfb][offset + 320 + xx] = bgcolour;
+                /* bg_transparent: leave existing pixel (rainbow bar shows through) */
+            }
+            /* outside clip region: leave existing pixel untouched */
+            bits <<= 1;
+        }
+        offset += 640;
+    }
+}
+
+/* gprint_clipped — render a string in TXT_DOUBLE mode, clipping to [clip_x0, clip_x1).
+ * x, clip_x0 and clip_x1 must be even.
+ * Characters entirely left of clip_x0 are skipped; iteration stops at clip_x1. */
+void
+gprint_clipped (int x, int y, char *text, int clip_x0, int clip_x1)
+{
+    int n = strlen (text);
+    int i;
+    int cx = x;
+    for (i = 0; i < n; i++, cx += 16)
+    {
+        if (cx >= clip_x1) break;           /* rest of string is off the right edge */
+        if (cx + 16 <= clip_x0) continue;  /* this char is entirely off the left edge */
+        drawcharw_clipped (cx, y, text[i], clip_x0, clip_x1);
+    }
+}
+
 /****************************************************************************
 * gprint
 ****************************************************************************/
@@ -501,7 +559,7 @@ char Coders2[] = "infact for Neo-CD Redux (2011)";
 char Coders3[] = "megalomaniac for Neo-CD Redux Unofficial (2013-2016)";
 char Fun[]     = "GIGA POWER!";
 char iosVersion[20] = {0};
-char appVersion[20]= "NeoCD-RX v1.0.02";
+char appVersion[20]= "NeoCD-RX v1.1.00";
 
 #ifdef HW_RVL
 	sprintf(iosVersion, "IOS : %d", IOS_GetVersion());
