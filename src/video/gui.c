@@ -31,13 +31,14 @@ extern u8 console_font_8x16[];
 
 static u32 fgcolour = COLOR_WHITE;
 static u32 bgcolour = COLOR_BLACK;
+static int bg_transparent = 0;  /* when 1, background pixels in drawcharw are skipped (backdrop shows through) */
 static unsigned char background[1280 * 480] ATTRIBUTE_ALIGN (32);
 static unsigned char bannerunc[banner_WIDTH * banner_HEIGHT * 2] ATTRIBUTE_ALIGN (32);
 static void unpack (void);
 
-unsigned short SaveDevice = 1;           // 0=MemCard, 1=SD/ODE
-unsigned char DefaultLoadDevice = 0;     // 0=None,1=SD,2=USB,3=IDE-EXI,4=WKF,5=DVD
-unsigned char MenuTrigger = 0;            // 0=L,1=R,2=L+R,3=C-left,4=C-right
+unsigned short SaveDevice = 1;            // 0=MemCard, 1=SD/ODE
+unsigned char DefaultLoadDevice = 0;      // 0=None,1=SD,2=USB,3=IDE-EXI,4=WKF,5=DVD
+unsigned char MenuTrigger = 4;            // 0=L,1=R,2=L+R,3=C-left,4=C-right
 unsigned char VideoMode = 0;              // 0=Auto,1=480p,2=480i
 
 /* Prefs file path — tried bare (GC/ODE) then sd: prefix (Wii) */
@@ -234,7 +235,7 @@ drawcharw (int x, int y, char c)
 	  if (bits & 0x80)
 		xfb[whichfb][offset + xx] = xfb[whichfb][offset + 320 + xx] =
 		  fgcolour;
-	  else
+	  else if (!bg_transparent)
 		xfb[whichfb][offset + xx] = xfb[whichfb][offset + 320 + xx] =
 		  bgcolour;
 
@@ -395,7 +396,7 @@ char Coders1[] = "Wiimpathy / Jacobeian for NeoCD-Wii (2011)";
 char Coders2[] = "infact for Neo-CD Redux (2011)";
 char Coders3[] = "megalomaniac for Neo-CD Redux Unofficial (2013-2016)";
 char Fun[]     = "GIGA POWER!";
-char iosVersion[20];
+char iosVersion[20] = {0};
 char appVersion[20]= "NeoCD-RX v1.0.02";
 
 #ifdef HW_RVL
@@ -503,15 +504,17 @@ static void draw_menu(char items[][22], int maxitems, int selected)
    {
       if ( i == selected )
       {
-         setfgcolour (BMPANE);
+         setfgcolour (COLOR_WHITE);
          setbgcolour (INVTEXT);
+         bg_transparent = 0;
          gprint( ( 640 - ( strlen(items[i]) << 4 )) >> 1, j, items[i], TXT_DOUBLE);
       }
       else
       {
          setfgcolour (COLOR_BLACK);
-         setbgcolour (BMPANE);
-         gprint( ( 640 - ( strlen(items[i]) << 4 )) >> 1, j, items[i], TXT_DOUBLE); 
+         bg_transparent = 1;
+         gprint( ( 640 - ( strlen(items[i]) << 4 )) >> 1, j, items[i], TXT_DOUBLE);
+         bg_transparent = 0;
       }
       j += 32;
    }
@@ -680,9 +683,9 @@ static const char *menu_trigger_label(unsigned char v)
     case 0: return "L";
     case 1: return "R";
     case 2: return "L+R";
-    case 3: return "C-left";
-    case 4: return "C-right";
-    default: return "L";
+    case 3: return "C-Left";
+    case 4: return "C-Right";
+    default: return "C-Right";
   }
 }
 
@@ -785,29 +788,34 @@ static int confirm_vmode(void)
     int sec_remaining = (frames + FRAMES_PER_SEC - 1) / FRAMES_PER_SEC;
 
     DrawScreen();
-    fgcolour = COLOR_WHITE;
+    fgcolour = COLOR_BLACK;
     bgcolour = BMPANE;
 
     gprint((640 - (21 * 16)) >> 1, 220, (char *)"Keep this video mode?", TXT_DOUBLE);
 
     snprintf(countdown, sizeof(countdown), "Reverting in %d second%s",
-             sec_remaining, sec_remaining == 1 ? "" : "s");
+             sec_remaining, sec_remaining == 1 ? " " : "s");
     gprint((640 - (strlen(countdown) * 16)) >> 1, 258, countdown, TXT_DOUBLE);
 
     /* Draw two buttons: Revert | Keep */
-    strncpy(revert_item, "  Revert  ", 21);
-    strncpy(keep_item,   "  Keep    ", 21);
+    strncpy(revert_item, " Revert ", 21);
+    strncpy(keep_item,   "  Keep  ", 21);
 
     if (selected == 0) {
-      setfgcolour(BMPANE);  setbgcolour(COLOR_WHITE);
-      gprint(160, 320, revert_item, TXT_DOUBLE);
-      setfgcolour(COLOR_WHITE); setbgcolour(BMPANE);
-      gprint(370, 320, keep_item, TXT_DOUBLE);
+      setfgcolour(COLOR_WHITE);  setbgcolour(INVTEXT);
+      bg_transparent = 0;
+      gprint(178, 320, revert_item, TXT_DOUBLE);
+      setfgcolour(COLOR_BLACK);
+      bg_transparent = 1;
+      gprint(338, 320, keep_item, TXT_DOUBLE);
+      bg_transparent = 0;
     } else {
-      setfgcolour(COLOR_WHITE); setbgcolour(BMPANE);
-      gprint(160, 320, revert_item, TXT_DOUBLE);
-      setfgcolour(BMPANE);  setbgcolour(COLOR_WHITE);
-      gprint(370, 320, keep_item, TXT_DOUBLE);
+      setfgcolour(COLOR_BLACK);
+      bg_transparent = 1;
+      gprint(178, 320, revert_item, TXT_DOUBLE);
+      bg_transparent = 0;
+      setfgcolour(COLOR_WHITE);  setbgcolour(INVTEXT);
+      gprint(338, 320, keep_item, TXT_DOUBLE);
     }
 
     setfgcolour(COLOR_WHITE);

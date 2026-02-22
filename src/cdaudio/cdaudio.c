@@ -99,7 +99,7 @@ int cdda_get_disk_info(void)
 //----------------------------------------------------------------------------
 int cdda_play(int track)
 {
-  char Path[1024];
+  char Path[2048];
 
   if (cdda_disabled)
     return 1;
@@ -196,7 +196,7 @@ void cdda_loop_check(void)
 static int mp3_init(void)
 {
   int i;
-  char Path[1024];
+  char Path[2048];
 
   cdda_min_track = cdda_max_track = 0;
   cdda_current_track = 0;
@@ -432,4 +432,3 @@ static int DecodeNextFrame(int samples)
     }
   return OutputPtr - madOutBuffer;		  /*** Signal end ***/
 }
-

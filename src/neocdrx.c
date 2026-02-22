@@ -207,7 +207,6 @@ static void neogeo_free_memory(void)
 ****************************************************************************/
 int main(void)
 {
-    GENFILE fp;
     unsigned int crc;
 
     VIDEO_Init();

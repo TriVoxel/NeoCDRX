@@ -230,8 +230,7 @@ void GetSubDirectories(char *dir, char *buf, int len)
         if (count >= MAX_SUBDIRS) break;
         if (ofs + 4 > len) break;
 
-        strncpy(subdirnames[count], entry->d_name, MAX_DIRNAME - 1);
-        subdirnames[count][MAX_DIRNAME - 1] = '\0';
+        snprintf(subdirnames[count], MAX_DIRNAME, "%s", entry->d_name);
 
         /* Store pointer value in buf (matches original iso9660.c format) */
         char *ptr = subdirnames[count];

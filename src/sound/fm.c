@@ -653,7 +653,7 @@ static void FM_EG_SSG_AR(FM_SLOT * SLOT)
 /* ----- key on of SLOT ----- */
 #define FM_KEY_IS(SLOT) ((SLOT)->eg_next!=FM_EG_Release)
 
-inline void FM_KEYON(FM_CH * CH, int s)
+void FM_KEYON(FM_CH * CH, int s)
 {
     FM_SLOT *SLOT = &CH->SLOT[s];
 
@@ -681,7 +681,7 @@ inline void FM_KEYON(FM_CH * CH, int s)
 }
 
 /* ----- key off of SLOT ----- */
-inline void FM_KEYOFF(FM_CH * CH, int s)
+void FM_KEYOFF(FM_CH * CH, int s)
 {
 
     FM_SLOT *SLOT = &CH->SLOT[s];
@@ -767,7 +767,7 @@ static void setup_connection(FM_CH * CH)
 }
 
 /* set detune & multiple */
-inline void set_det_mul(FM_ST * ST, FM_CH * CH, FM_SLOT * SLOT, int v)
+void set_det_mul(FM_ST * ST, FM_CH * CH, FM_SLOT * SLOT, int v)
 {
     SLOT->mul = MUL_TABLE[v & 0x0f];
     SLOT->DT = ST->DT_TABLE[(v >> 4) & 7];
@@ -786,7 +786,7 @@ inline void set_tl(FM_CH * CH, FM_SLOT * SLOT, int v, int csmflag)
 }
 
 /* set attack rate & key scale  */
-inline void set_ar_ksr(FM_CH * CH, FM_SLOT * SLOT, int v, Sint32 * ar_table)
+void set_ar_ksr(FM_CH * CH, FM_SLOT * SLOT, int v, Sint32 * ar_table)
 {
     SLOT->KSR = 3 - (v >> 6);
     SLOT->AR = (v &= 0x1f) ? &ar_table[v << 1] : RATE_0;
@@ -797,7 +797,7 @@ inline void set_ar_ksr(FM_CH * CH, FM_SLOT * SLOT, int v, Sint32 * ar_table)
 }
 
 /* set decay rate */
-inline void set_dr(FM_SLOT * SLOT, int v, Sint32 * dr_table)
+void set_dr(FM_SLOT * SLOT, int v, Sint32 * dr_table)
 {
     SLOT->DR = (v &= 0x1f) ? &dr_table[v << 1] : RATE_0;
     SLOT->evsd = SLOT->DR[SLOT->ksr];
@@ -806,7 +806,7 @@ inline void set_dr(FM_SLOT * SLOT, int v, Sint32 * dr_table)
 }
 
 /* set sustain rate */
-inline void set_sr(FM_SLOT * SLOT, int v, Sint32 * dr_table)
+void set_sr(FM_SLOT * SLOT, int v, Sint32 * dr_table)
 {
     SLOT->SR = (v &= 0x1f) ? &dr_table[v << 1] : RATE_0;
     SLOT->evss = SLOT->SR[SLOT->ksr];
@@ -815,7 +815,7 @@ inline void set_sr(FM_SLOT * SLOT, int v, Sint32 * dr_table)
 }
 
 /* set release rate */
-inline void set_sl_rr(FM_SLOT * SLOT, int v, Sint32 * dr_table)
+void set_sl_rr(FM_SLOT * SLOT, int v, Sint32 * dr_table)
 {
     SLOT->SL = SL_TABLE[(v >> 4)];
     SLOT->RR = &dr_table[((v & 0x0f) << 2) | 2];
@@ -1754,7 +1754,7 @@ static void InitOPNB_ADPCMATable(void)
 #endif
 
 /**** ADPCM A (Non control type) ****/
-inline void OPNB_ADPCM_CALC_CHA(YM2610 * F2610, ADPCM_CH * ch)
+void OPNB_ADPCM_CALC_CHA(YM2610 * F2610, ADPCM_CH * ch)
 {
     Uint32 step;
     int data;

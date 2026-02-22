@@ -43,8 +43,8 @@ int accept_input = 0;
 /* MenuTrigger extern is in neocdrx.h */
 
 /* Returns non-zero if the current controller state should open the menu.
- * C-stick threshold is 100 out of 127 max — requires a firm deliberate push. */
-#define CSTICK_THRESHOLD 90
+ * C-stick value can be between 0 and 100 */
+#define CSTICK_THRESHOLD 85
 static int menu_triggered(int chan)
 {
   u32 p = PAD_ButtonsHeld(chan);

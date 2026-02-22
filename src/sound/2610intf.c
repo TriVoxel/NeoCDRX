@@ -81,9 +81,7 @@ void YM2610UpdateRequest(void)
 
 int YM2610_sh_start(void)
 {
-    int j;
     int rate = SAMPLE_RATE;
-    char buf[YM2610_NUMBUF][40];
     void *pcmbufa, *pcmbufb;
     int pcmsizea, pcmsizeb;
 
@@ -92,10 +90,6 @@ int YM2610_sh_start(void)
 
     /* Timer Handler set */
     FMTimerInit();
-    for (j = 0; j < YM2610_NUMBUF; j++) {
-	buf[j][0] = 0;
-    }
-    if (buf == NULL) { }
 
     stream = stream_init_multi(YM2610_NUMBUF, 0, YM2610UpdateOne);
     pcmbufa = (void *) neogeo_pcm_memory;

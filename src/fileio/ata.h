@@ -101,15 +101,18 @@ int ataShutdown(int chn);
 extern int _ideexi_version;
 
 // Swap defines
+#ifndef __lhbrx
 #define __lhbrx(base,index)			\
 ({	register u16 res;				\
 	__asm__ volatile ("lhbrx	%0,%1,%2" : "=r"(res) : "b%"(index), "r"(base) : "memory"); \
 	res; })
+#endif /* __lhbrx */
 
+#ifndef __lwbrx
 #define __lwbrx(base,index)			\
 ({	register u32 res;				\
 	__asm__ volatile ("lwbrx	%0,%1,%2" : "=r"(res) : "b%"(index), "r"(base) : "memory"); \
 	res; })
+#endif /* __lwbrx */
 
 #endif
-

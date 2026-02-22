@@ -53,7 +53,7 @@ static int DVDFindFree(void)
 ****************************************************************************/
 static u32 DVDfopen(const char *filename, const char *mode)
 {
-    char fullpath[1024];
+    char fullpath[2052];
     int handle;
     FILE *fp;
     int size;

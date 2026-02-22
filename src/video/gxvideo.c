@@ -123,7 +123,7 @@ draw_square (Mtx v)
 void
 StartGX (void)
 {
-  Mtx p;
+  Mtx44 p;
 
   GXColor gxbackground = { 0, 0, 0, 0xff };
 

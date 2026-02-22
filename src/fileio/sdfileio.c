@@ -281,8 +281,8 @@ static void SDmount()
 
   // Define DIR search location by Device type
   if (use_IDE) {
-     if ( IDEA_slot->startup(IDEA_slot) && fatMountSimple("IDEA", (DISC_INTERFACE*)IDEA_slot) ) sprintf(root_dir,"IDEA:");
-     else if ( IDEB_slot->startup(IDEB_slot) && fatMountSimple("IDEB", (DISC_INTERFACE*)IDEB_slot) ) sprintf(root_dir,"IDEB:");
+     if ( IDEA_slot->startup((DISC_INTERFACE*)IDEA_slot) && fatMountSimple("IDEA", (DISC_INTERFACE*)IDEA_slot) ) sprintf(root_dir,"IDEA:");
+     else if ( IDEB_slot->startup((DISC_INTERFACE*)IDEB_slot) && fatMountSimple("IDEB", (DISC_INTERFACE*)IDEB_slot) ) sprintf(root_dir,"IDEB:");
      else { ActionScreen ("IDE-EXI not initialized"); return; }
   }
 #ifdef HW_RVL
@@ -290,7 +290,7 @@ static void SDmount()
   else if (use_USB) sprintf(root_dir,"usb:");
 #else
   else if (use_WKF) {
-     if ( WKF_slot->startup(WKF_slot) && fatMountSimple("WKF", (DISC_INTERFACE*)WKF_slot) )  sprintf(root_dir,"WKF:");
+     if ( WKF_slot->startup((DISC_INTERFACE*)WKF_slot) && fatMountSimple("WKF", (DISC_INTERFACE*)WKF_slot) )  sprintf(root_dir,"WKF:");
      else { ActionScreen ("WKF not initialized"); return; }
   }
   else {

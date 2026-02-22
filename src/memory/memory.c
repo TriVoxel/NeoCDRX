@@ -978,7 +978,7 @@ neogeo_decode_fix (unsigned char *mem, unsigned int offset,
 	*usage = (opaque == 64) ? 1 : 2;
       else
 	*usage = 0;
-      *usage++;
+      usage++;
     }
 }
 

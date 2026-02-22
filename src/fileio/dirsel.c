@@ -47,7 +47,7 @@ DrawDirSelector (int maxfile, int menupos, int currsel)
 
       if (i == currsel)
         {
-          setfgcolour (BMPANE);
+          setfgcolour (COLOR_WHITE);
           setbgcolour (INVTEXT);
           memset (inverse, 32, 40);
           inverse[32] = 0;
@@ -56,7 +56,7 @@ DrawDirSelector (int maxfile, int menupos, int currsel)
         }
       else
         {
-          setfgcolour (COLOR_WHITE);
+          setfgcolour (COLOR_BLACK);
           setbgcolour (BMPANE);
           gprint (64, j, display, TXT_DOUBLE);
         }
@@ -238,7 +238,7 @@ DirSelector (void)
 
      // Quit browser — return to main menu if a default device is set,
      // otherwise return to device menu so user can pick a different source.
-     if (joy & PAD_TRIGGER_Z) {
+     if (joy & PAD_TRIGGER_Z || joy & PAD_BUTTON_B) {
         have_ROM = 0;
         quit = 1;
         if (DefaultLoadDevice != 0)

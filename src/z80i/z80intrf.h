@@ -10,7 +10,7 @@
 ************************/
 
 #ifndef Z80INTRF_H
-#define Z80INRTF_H
+#define Z80INTRF_H
 
 #include "z80.h"
 

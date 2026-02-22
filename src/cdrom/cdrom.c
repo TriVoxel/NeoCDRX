@@ -194,7 +194,7 @@ int cdrom_mount(char *mount)
     /* Clear any previous ISO mount */
     if (iso_mounted) { ISO9660_Unmount("ncd:"); iso_mounted = false; }
     if (iso_fp) { fclose(iso_fp); iso_fp = NULL; }
-    strncpy(iso_dir, tmp, sizeof(iso_dir) - 1);
+    snprintf(iso_dir, sizeof(iso_dir), "%s", tmp);
     return 1;
   }
 
@@ -254,7 +254,7 @@ int cdrom_mount(char *mount)
   /* Set cdpath to the ISO9660 mount root */
   strcpy(cdpath, "ncd:/");
 
-  strncpy(iso_dir, tmp, sizeof(iso_dir) - 1);
+  snprintf(iso_dir, sizeof(iso_dir), "%s", tmp);
 
   return 1;
 }
