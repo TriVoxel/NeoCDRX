@@ -1,5 +1,7 @@
 # NeoCD RX
-[_**Check out the original project by niuus!**_](https://github.com/niuus/NeoCDRX/)
+_**Check out the [original project](https://github.com/niuus/NeoCDRX/) by [niuus](https://github.com/niuus)!**_
+
+## INTRODUCTION
 
 **_NeoCD RX_** is a _Neo Geo CD / Neo Geo CDZ_ emulator for the _GameCube_, _Wii_, and _Wii U_'s
 Virtual Wii. It owes its existence to various other emulators:
@@ -17,7 +19,7 @@ which are source ports of the original **_NeoCD_** emulator (Fabrice Martinez).
 (Under GPL License)
 
 
-### FEATURES
+## FEATURES
 
 * Z80 emulator core 3.6
 * M68000 emulator core 3.3
@@ -33,6 +35,8 @@ which are source ports of the original **_NeoCD_** emulator (Fabrice Martinez).
 * Open Source!
 
 ---
+
+# GETTING STARTED
 
 ## INSTALLATION AND USE
 
@@ -60,6 +64,18 @@ install the NeoCD-RX Forwarder Channel in your _Wii_ or _vWii_ System Menu, or t
 special NeoCD-RX Channel for Wii U, which reads the configuration and necessary
 files from your device "**_\NeoCDRX_**" folder, be it SD or USB.
 
+## PREPARING THE GAMES FOR USE WITH THE EMULATOR
+
+_Note: This is planned to change in the near future. I am planning some big changes to streamline this process, but will offer backwards compatibility to users who go through the trouble of setting it up this way._
+
+For every game disc, you need to create a subdirectory inside the included "**_\NeoCDRX\games_**" named whatever you like, and copy all the game data files there. Inside this folder, create another subdirectory called "**_mp3_**", where you have to copy your music tracks. **IMPORTANT**: even if you won't use the music, the folder is needed.
+
+The music tracks need to be encoded from the original CD's Red Book standard 44.1 kHz WAV, to MP3 format (128kbps minimum, or better), named exactly "**_TrackXX.mp3_**" where XX is a number that always starts at 02, as the data track is always 01. Free CD audio ripping software is readily available.
+
+Examples and pictures are inside the **NeoCDRX_manual.pdf**
+https://github.com/niuus/NeoCDRX/blob/main/NeoCDRX_manual.pdf
+
+After this, you are more than ready to start playing. Each game folder you make will be treated by the emulator as a full CD.
 
 ## CONFIGURATION
 
@@ -84,21 +100,9 @@ tracks, or raise the gain in Low / Mid / High frequencies to your liking.
 	- Video Mode
 		- Can either automatically detect the best video mode (recommended), or lets you override it to force progressive or interlaced video.
 
-
-## PREPARING THE GAMES FOR USE WITH THE EMULATOR
-
-_Note: This is planned to change in the near future. I am planning some big changes to streamline this process, but will offer backwards compatibility to users who go through the trouble of setting it up this way._
-
-For every game disc, you need to create a subdirectory inside the included "**_\NeoCDRX\games_**" named whatever you like, and copy all the game data files there. Inside this folder, create another subdirectory called "**_mp3_**", where you have to copy your music tracks. **IMPORTANT**: even if you won't use the music, the folder is needed.
-
-The music tracks need to be encoded from the original CD's Red Book standard 44.1 kHz WAV, to MP3 format (128kbps minimum, or better), named exactly "**_TrackXX.mp3_**" where XX is a number that always starts at 02, as the data track is always 01. Free CD audio ripping software is readily available.
-
-Examples and pictures are inside the **NeoCDRX_manual.pdf**
-https://github.com/niuus/NeoCDRX/blob/main/NeoCDRX_manual.pdf
-
-After this, you are more than ready to start playing. Each game folder you make will be treated by the emulator as a full CD.
-
 ---
+
+# CONTROLS
 
 ## SUPPORTED CONTROLLERS
 
@@ -192,6 +196,8 @@ Hold "L" button right before the emulator is loading to activate
 ```
 
 ---
+
+# MORE INFO
 
 ## RECENT CHANGELOG
 
