@@ -19,15 +19,15 @@ https://github.com/emukidid/neogeo-cd-redux
 ## FEATURES
 
 * Z80 emulator core 3.6
-	* M68000 emulator core 3.3
-	* Wii Remote, Wii Remote Plus, Wii Remote+Nunchuk, and GameCube controller support
-	* SD/SDHC, USB, WKF (GameCube), IDE-EXI V1, DVD support
-	* UStealth USB devices support
-	* Region select for uncut content and extra languages (USA / Europe / Japan)
-	* Neo Geo CD Virtual Memory Card (8KiB battery-backed SRAM chip) support. Save directly to SD/USB or to your physical GameCube card for max nostalgia!
-	* Sound FX / Music 3-Band equalizer
-	* Super fast loading times. Original console weakness is no more!
-	* Extensive options to suit every play style
+* M68000 emulator core 3.3
+* Wii Remote, Wii Remote Plus, Wii Remote+Nunchuk, and GameCube controller support
+* SD/SDHC, USB, WKF (GameCube), IDE-EXI V1, DVD support
+* UStealth USB devices support
+* Region select for uncut content and extra languages (USA / Europe / Japan)
+* Neo Geo CD Virtual Memory Card (8KiB battery-backed SRAM chip) support. Save directly to SD/USB or to your physical GameCube card for max nostalgia!
+* Sound FX / Music 3-Band equalizer
+* Super fast loading times. Original console weakness is no more!
+* Extensive options to suit every play style
 * Available in various skins/colors
 * Open Source!
 
