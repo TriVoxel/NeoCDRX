@@ -10,13 +10,14 @@ which are source ports of the original **_NeoCD_** emulator (Fabrice Martinez).
 
 **_NeoCD RX_** is a "homebrew application" which means you will need a way to run unsigned code on your Nintendo Wii. The best website for getting started with Wii homebrew is WiiBrew (www.wiibrew.org).
 
-Based/forked from:
-https://github.com/emukidid/neogeo-cd-redux
+**Based/forked from:**
+- https://github.com/emukidid/neogeo-cd-redux
+- https://github.com/niuus/NeoCDRX
 
 (Under GPL License)
 
 
-## FEATURES
+### FEATURES
 
 * Z80 emulator core 3.6
 * M68000 emulator core 3.3
@@ -31,39 +32,7 @@ https://github.com/emukidid/neogeo-cd-redux
 * Available in various skins/colors
 * Open Source!
 
-
-## RECENT CHANGELOG
-
-[1.1.00 - Feb 22, 2026]
-* Improved hardware support
-	* Added support for GCLoader & CubeODE
-	* Added support for exFAT SD cards
-	* Faster loading times thanks to libogc2 & libdvm upgrade
-* Improved settings
-	* Added settings save/load
-	* Added filtering options
-		* Re-written GX pipeline gives you pixel perfect integer scaling.
-		* You can use nearest neighbor filtering for ultra-sharp, perfectly-crisp graphics, or bilinear to smooth out the jaggies!
-	* Added option to skip Neo Geo BIOS
-	* Added "Crop Overscan" option to hide unintended graphical glitches
-	* You can now set a preferred controller button combo or button to bring up the main menu
-	* You can now set a default load device so you can jump into games even faster!
-	* You can nowforce progressive scan or interlacing!
-* Upgraded user interface
-	* Unusable buttons are now hidden
-	* Improved file browser
-	* Selected button stands out better (Pretty rainbowssssss!!!!!!)
-* Changed button mappings to make them more intuitive
-* Bug fixes
-	* Fixed bug where a power cycle was required to re-launch NeoCDRX after closing it.
-	* Fixed a bug in the file browser where a page could be empty if you scrolled it weirdly
-	* Other minor bug fixes
-* The entire experience has been overhauled!
-* Huge thank you to niuus for maintaining the original. I couldn't have done it without them, or all the other amazing and talent people who built the foundation of this software. Check out the in-app credits menu!
-
-[older update history in the **NeoCDRX_manual.pdf**]
-https://github.com/niuus/NeoCDRX/blob/main/NeoCDRX_manual.pdf
-
+---
 
 ## INSTALLATION AND USE
 
@@ -129,6 +98,7 @@ https://github.com/niuus/NeoCDRX/blob/main/NeoCDRX_manual.pdf
 
 After this, you are more than ready to start playing. Each game folder you make will be treated by the emulator as a full CD.
 
+---
 
 ## SUPPORTED CONTROLLERS
 
@@ -220,6 +190,40 @@ _Failsafe video mode (Force Menu to 480i with Component / Digital cable)_
 ```
 Hold "L" button right before the emulator is loading to activate
 ```
+
+---
+
+## RECENT CHANGELOG
+
+[1.1.00 - Feb 22, 2026]
+* Improved hardware support
+	* Added support for GCLoader & CubeODE
+	* Added support for exFAT SD cards
+	* Faster loading times thanks to libogc2 & libdvm upgrade
+* Improved settings
+	* Added settings save/load
+	* Added filtering options
+		* Re-written GX pipeline gives you pixel perfect integer scaling.
+		* You can use nearest neighbor filtering for ultra-sharp, perfectly-crisp graphics, or bilinear to smooth out the jaggies!
+	* Added option to skip Neo Geo BIOS
+	* Added "Crop Overscan" option to hide unintended graphical glitches
+	* You can now set a preferred controller button combo or button to bring up the main menu
+	* You can now set a default load device so you can jump into games even faster!
+	* You can nowforce progressive scan or interlacing!
+* Upgraded user interface
+	* Unusable buttons are now hidden
+	* Improved file browser
+	* Selected button stands out better (Pretty rainbowssssss!!!!!!)
+* Changed button mappings to make them more intuitive
+* Bug fixes
+	* Fixed bug where a power cycle was required to re-launch NeoCDRX after closing it.
+	* Fixed a bug in the file browser where a page could be empty if you scrolled it weirdly
+	* Other minor bug fixes
+* The entire experience has been overhauled!
+* Huge thank you to niuus for maintaining the original. I couldn't have done it without them, or all the other amazing and talent people who built the foundation of this software. Check out the in-app credits menu!
+
+[older update history in the **NeoCDRX_manual.pdf**]
+https://github.com/niuus/NeoCDRX/blob/main/NeoCDRX_manual.pdf
 
 
 ## CREDITS & THANKS
